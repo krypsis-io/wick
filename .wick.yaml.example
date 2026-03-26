@@ -1,0 +1,13 @@
+# Wick project configuration
+# Place this file as .wick.yaml in your project root.
+
+# Redaction style: "redacted" (default), "stars", or a custom string.
+# style: redacted
+
+# Custom detection patterns (in addition to built-in secrets and PII).
+# patterns:
+#   - name: internal-project-code
+#     regex: "ACME-\\d{4}"
+#   - name: internal-hostname
+#     regex: "\\w+\\.internal\\.acme\\.com"
+#     replacement: "[INTERNAL-HOST]"
