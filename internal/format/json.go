@@ -33,7 +33,9 @@ func redactString(val string, d *detect.Detector, style redact.Style, findings *
 // ProcessJSON parses JSON, redacts string values, and preserves structure.
 func ProcessJSON(input string, detector *detect.Detector, style redact.Style) (string, []detect.Finding) {
 	var data any
-	if err := json.Unmarshal([]byte(input), &data); err != nil {
+	dec := json.NewDecoder(strings.NewReader(input))
+	dec.UseNumber()
+	if err := dec.Decode(&data); err != nil {
 		// Fall back to plaintext if JSON parsing fails.
 		return ProcessPlain(input, detector, style)
 	}

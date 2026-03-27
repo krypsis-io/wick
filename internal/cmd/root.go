@@ -53,12 +53,23 @@ func Execute() {
 }
 
 func run(_ *cobra.Command, _ []string) error {
+	// Validate flag combinations.
+	if flagDir != "" && len(flagFiles) > 0 {
+		return fmt.Errorf("--dir and --file are mutually exclusive")
+	}
+	if flagOut != "" && flagDir == "" {
+		return fmt.Errorf("--out is only valid with --dir")
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
 
-	style := resolveStyle(cfg)
+	style, err := resolveStyle(cfg)
+	if err != nil {
+		return err
+	}
 	detector, err := detect.New()
 	if err != nil {
 		return fmt.Errorf("detector: %w", err)
@@ -69,7 +80,10 @@ func run(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	outputFormat := resolveFormat(cfg)
+	outputFormat, err := resolveFormat(cfg)
+	if err != nil {
+		return err
+	}
 
 	var foundCount int
 
@@ -156,12 +170,24 @@ func processFiles(files []string, d *detect.Detector, style redact.Style, output
 }
 
 func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ string) (int, error) {
+	dirAbs, err := filepath.Abs(dir)
+	if err != nil {
+		return 0, fmt.Errorf("resolving dir path: %w", err)
+	}
+	outAbs, err := filepath.Abs(outDir)
+	if err != nil {
+		return 0, fmt.Errorf("resolving out path: %w", err)
+	}
+	if outAbs == dirAbs || strings.HasPrefix(outAbs, dirAbs+string(os.PathSeparator)) {
+		return 0, fmt.Errorf("--out must not be inside --dir (would recurse into output)")
+	}
+
 	total := 0
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
+		if !info.Mode().IsRegular() {
 			return nil
 		}
 
@@ -196,29 +222,35 @@ func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ st
 	return total, err
 }
 
-func resolveStyle(cfg *config.Config) redact.Style {
+func resolveStyle(cfg *config.Config) (redact.Style, error) {
 	s := cfg.Style
 	if flagStyle != "" {
 		s = flagStyle
 	}
 	switch {
+	case s == "" || s == "redacted":
+		return redact.StyleRedacted, nil
 	case s == "stars":
-		return redact.StyleStars
+		return redact.StyleStars, nil
 	case strings.HasPrefix(s, "custom="):
 		redact.SetCustomReplacement(strings.TrimPrefix(s, "custom="))
-		return redact.CustomStyle()
+		return redact.CustomStyle(), nil
 	default:
-		return redact.StyleRedacted
+		return 0, fmt.Errorf("unknown style %q: use redacted, stars, or custom=\"...\"", s)
 	}
 }
 
-func resolveFormat(cfg *config.Config) string {
+func resolveFormat(cfg *config.Config) (string, error) {
 	f := cfg.Format
 	if flagFormat != "" {
 		f = flagFormat
 	}
-	if f == "json" {
-		return "json"
+	switch f {
+	case "", "text":
+		return "text", nil
+	case "json":
+		return "json", nil
+	default:
+		return "", fmt.Errorf("unknown format %q: use text or json", f)
 	}
-	return "text"
 }
