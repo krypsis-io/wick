@@ -170,7 +170,10 @@ func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ st
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		relPath, _ := filepath.Rel(dir, path)
+		relPath, err := filepath.Rel(dir, path)
+		if err != nil {
+			return fmt.Errorf("computing relative path for %s: %w", path, err)
+		}
 		outPath := filepath.Join(outDir, relPath)
 
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
