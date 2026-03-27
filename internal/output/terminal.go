@@ -59,12 +59,16 @@ func replaceLine(line string, findings []detect.Finding, colored string) string 
 	var result strings.Builder
 	prev := 0
 	for _, s := range merged {
-		if s.start > len(line) || s.end > len(line) {
+		if s.start >= len(line) {
 			continue
+		}
+		end := s.end
+		if end > len(line) {
+			end = len(line)
 		}
 		result.WriteString(line[prev:s.start])
 		result.WriteString(colored)
-		prev = s.end
+		prev = end
 	}
 	result.WriteString(line[prev:])
 	return result.String()
