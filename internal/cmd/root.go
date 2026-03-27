@@ -91,7 +91,10 @@ func run(_ *cobra.Command, _ []string) error {
 		}
 	} else {
 		// Stdin mode (default).
-		stat, _ := os.Stdin.Stat()
+		stat, err := os.Stdin.Stat()
+		if err != nil {
+			return fmt.Errorf("stdin: %w", err)
+		}
 		if (stat.Mode() & os.ModeCharDevice) != 0 {
 			return fmt.Errorf("no input: pipe data to wick or use --file/--dir")
 		}
