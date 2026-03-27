@@ -62,7 +62,9 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("detector: %w", err)
 	}
 	if len(cfg.CustomPatterns) > 0 {
-		detector.SetCustomPatterns(cfg.CustomPatterns)
+		if err := detector.SetCustomPatterns(cfg.CustomPatterns); err != nil {
+			return fmt.Errorf("config: %w", err)
+		}
 	}
 
 	outputFormat := resolveFormat(cfg)

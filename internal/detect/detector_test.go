@@ -94,9 +94,11 @@ func TestDetector_CustomPattern(t *testing.T) {
 		t.Fatalf("failed to create detector: %v", err)
 	}
 
-	d.SetCustomPatterns([]CustomPattern{
+	if err := d.SetCustomPatterns([]CustomPattern{
 		{Name: "internal-code", Regex: `ACME-\d{4}`},
-	})
+	}); err != nil {
+		t.Fatalf("failed to set custom patterns: %v", err)
+	}
 
 	input := `Project ACME-1234 is active`
 	findings := d.Detect(input)

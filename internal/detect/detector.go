@@ -18,8 +18,13 @@ func New() (*Detector, error) {
 }
 
 // SetCustomPatterns loads user-defined patterns into the detector.
-func (d *Detector) SetCustomPatterns(patterns []CustomPattern) {
-	d.customPatterns = compileCustomPatterns(patterns)
+func (d *Detector) SetCustomPatterns(patterns []CustomPattern) error {
+	compiled, err := compileCustomPatterns(patterns)
+	if err != nil {
+		return err
+	}
+	d.customPatterns = compiled
+	return nil
 }
 
 // Detect scans the input text and returns all findings.

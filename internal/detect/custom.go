@@ -1,6 +1,9 @@
 package detect
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+)
 
 // CustomPattern is a user-defined detection pattern from .wick.yaml.
 type CustomPattern struct {
@@ -15,12 +18,12 @@ type compiledCustom struct {
 	Replacement string
 }
 
-func compileCustomPatterns(patterns []CustomPattern) []compiledCustom {
+func compileCustomPatterns(patterns []CustomPattern) ([]compiledCustom, error) {
 	compiled := make([]compiledCustom, 0, len(patterns))
 	for _, p := range patterns {
 		re, err := regexp.Compile(p.Regex)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("invalid pattern %q: %w", p.Name, err)
 		}
 		compiled = append(compiled, compiledCustom{
 			Name:        p.Name,
@@ -28,7 +31,7 @@ func compileCustomPatterns(patterns []CustomPattern) []compiledCustom {
 			Replacement: p.Replacement,
 		})
 	}
-	return compiled
+	return compiled, nil
 }
 
 func matchCustom(patterns []compiledCustom, line string, lineNum int) []Finding {
