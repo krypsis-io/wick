@@ -1,3 +1,4 @@
+// Package cmd implements the wick CLI commands and flags.
 package cmd
 
 import (
@@ -43,6 +44,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagSummary, "summary", false, "print redaction summary to stderr")
 }
 
+// Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -50,7 +52,7 @@ func Execute() {
 	}
 }
 
-func run(cmd *cobra.Command, args []string) error {
+func run(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
@@ -150,7 +152,7 @@ func processFiles(files []string, d *detect.Detector, style redact.Style, output
 	return total, nil
 }
 
-func processDir(dir, outDir string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
+func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ string) (int, error) {
 	total := 0
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {

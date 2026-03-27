@@ -1,3 +1,4 @@
+// Package detect provides secret, PII, and custom pattern detection.
 package detect
 
 import "strings"

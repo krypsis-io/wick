@@ -1,3 +1,4 @@
+// Package output provides terminal, JSON, and summary output formatting.
 package output
 
 import (
@@ -21,8 +22,8 @@ type jsonFinding struct {
 }
 
 type jsonSummary struct {
-	Total   int            `json:"total"`
-	ByType  map[string]int `json:"by_type"`
+	Total  int            `json:"total"`
+	ByType map[string]int `json:"by_type"`
 }
 
 // JSON formats the redacted output and findings as a JSON string.

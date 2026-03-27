@@ -1,3 +1,4 @@
+// Package redact replaces detected findings with configurable replacement strings.
 package redact
 
 import (

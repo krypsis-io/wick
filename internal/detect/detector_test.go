@@ -117,9 +117,9 @@ func TestDetector_CustomPattern(t *testing.T) {
 
 func TestShannonEntropy(t *testing.T) {
 	tests := []struct {
-		input    string
-		minBits  float64
-		maxBits  float64
+		input   string
+		minBits float64
+		maxBits float64
 	}{
 		{"aaaa", 0, 0.1},
 		{"abcd", 1.9, 2.1},

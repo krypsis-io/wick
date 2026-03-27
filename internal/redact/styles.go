@@ -3,6 +3,7 @@ package redact
 // Style determines how redacted values are replaced.
 type Style int
 
+// Built-in redaction styles.
 const (
 	StyleRedacted Style = iota // [REDACTED]
 	StyleStars                 // ***

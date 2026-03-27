@@ -14,20 +14,20 @@ var embeddedPatterns embed.FS
 
 // gitleaksConfig is the top-level TOML structure.
 type gitleaksConfig struct {
-	Title   string          `toml:"title"`
-	Rules   []gitleaksRule  `toml:"rules"`
+	Title     string         `toml:"title"`
+	Rules     []gitleaksRule `toml:"rules"`
 	Allowlist *gitleaksAllow `toml:"allowlist"`
 }
 
 type gitleaksRule struct {
-	ID          string            `toml:"id"`
-	Description string            `toml:"description"`
-	Regex       string            `toml:"regex"`
-	Keywords    []string          `toml:"keywords"`
-	Entropy     float64           `toml:"entropy"`
-	SecretGroup int               `toml:"secretGroup"`
-	Path        string            `toml:"path"`
-	Allowlists  []gitleaksAllow   `toml:"allowlists"`
+	ID          string          `toml:"id"`
+	Description string          `toml:"description"`
+	Regex       string          `toml:"regex"`
+	Keywords    []string        `toml:"keywords"`
+	Entropy     float64         `toml:"entropy"`
+	SecretGroup int             `toml:"secretGroup"`
+	Path        string          `toml:"path"`
+	Allowlists  []gitleaksAllow `toml:"allowlists"`
 }
 
 type gitleaksAllow struct {

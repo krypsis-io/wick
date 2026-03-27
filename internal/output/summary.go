@@ -12,7 +12,7 @@ import (
 // Summary writes a human-readable summary of findings to the given writer (typically stderr).
 func Summary(w io.Writer, findings []detect.Finding) {
 	if len(findings) == 0 {
-		fmt.Fprintln(w, "wick: no secrets or PII detected")
+		_, _ = fmt.Fprintln(w, "wick: no secrets or PII detected")
 		return
 	}
 
@@ -33,7 +33,7 @@ func Summary(w io.Writer, findings []detect.Finding) {
 	if n := byCategory["custom"]; n > 0 {
 		parts = append(parts, fmt.Sprintf("%d custom", n))
 	}
-	fmt.Fprintf(w, "wick: redacted %d finding(s) — %s\n", len(findings), strings.Join(parts, ", "))
+	_, _ = fmt.Fprintf(w, "wick: redacted %d finding(s) — %s\n", len(findings), strings.Join(parts, ", "))
 
 	// Detail by rule.
 	rules := make([]string, 0, len(byRule))
@@ -42,6 +42,6 @@ func Summary(w io.Writer, findings []detect.Finding) {
 	}
 	sort.Strings(rules)
 	for _, r := range rules {
-		fmt.Fprintf(w, "  %s: %d\n", r, byRule[r])
+		_, _ = fmt.Fprintf(w, "  %s: %d\n", r, byRule[r])
 	}
 }

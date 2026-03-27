@@ -1,3 +1,4 @@
+// Package config handles loading and merging wick configuration files.
 package config
 
 import (

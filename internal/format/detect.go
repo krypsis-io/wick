@@ -1,3 +1,4 @@
+// Package format provides format-aware detection and redaction for JSON, YAML, .env, and plaintext.
 package format
 
 import (
@@ -8,6 +9,7 @@ import (
 // Format represents a detected input format.
 type Format int
 
+// Supported input formats.
 const (
 	FormatPlain Format = iota
 	FormatJSON
