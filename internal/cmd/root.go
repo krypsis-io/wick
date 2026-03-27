@@ -92,6 +92,9 @@ func run(_ *cobra.Command, _ []string) error {
 		if flagOut == "" {
 			return fmt.Errorf("--out is required with --dir")
 		}
+		if outputFormat == "json" {
+			return fmt.Errorf("--format json is not supported with --dir")
+		}
 		n, err := processDir(flagDir, flagOut, detector, style, outputFormat)
 		foundCount = n
 		if err != nil {
