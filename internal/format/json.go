@@ -8,6 +8,37 @@ import (
 	"github.com/krypsis-io/wick/internal/redact"
 )
 
+// redactString detects and redacts secrets/PII in a string value line by line,
+// so that multi-line strings have correct byte offsets for redaction.
+func redactString(val string, d *detect.Detector, style redact.Style, findings *[]detect.Finding) (string, bool) {
+	lines := strings.Split(val, "\n")
+	changed := false
+	for i, line := range lines {
+		found := d.Detect(line)
+		lineFindings := filterLineFindings(found, 1)
+		if len(lineFindings) > 0 {
+			*findings = append(*findings, lineFindings...)
+			lines[i] = redact.Redact(line, lineFindings, style)
+			changed = true
+		}
+	}
+	if changed {
+		return strings.Join(lines, "\n"), true
+	}
+	return val, false
+}
+
+// filterLineFindings returns findings for a specific 1-based line number.
+func filterLineFindings(findings []detect.Finding, lineNum int) []detect.Finding {
+	var filtered []detect.Finding
+	for _, f := range findings {
+		if f.Line == lineNum {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
 // ProcessJSON parses JSON, redacts string values, and preserves structure.
 func ProcessJSON(input string, detector *detect.Detector, style redact.Style) (string, []detect.Finding) {
 	var data any
@@ -50,10 +81,8 @@ func walkJSON(v any, d *detect.Detector, style redact.Style, findings *[]detect.
 		}
 		return result
 	case string:
-		found := d.Detect(val)
-		if len(found) > 0 {
-			*findings = append(*findings, found...)
-			return redact.Redact(val, found, style)
+		if result, changed := redactString(val, d, style, findings); changed {
+			return result
 		}
 		return val
 	default:

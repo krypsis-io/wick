@@ -46,10 +46,8 @@ func walkYAML(node *yaml.Node, d *detect.Detector, style redact.Style, findings 
 		}
 	case yaml.ScalarNode:
 		if node.Tag == "!!str" || node.Tag == "" {
-			found := d.Detect(node.Value)
-			if len(found) > 0 {
-				*findings = append(*findings, found...)
-				node.Value = redact.Redact(node.Value, found, style)
+			if result, changed := redactString(node.Value, d, style, findings); changed {
+				node.Value = result
 			}
 		}
 	}

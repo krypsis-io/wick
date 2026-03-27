@@ -14,22 +14,13 @@ func ProcessPlain(input string, detector *detect.Detector, style redact.Style) (
 	result := make([]string, len(lines))
 
 	for i, line := range lines {
-		lineNum := i + 1
-		findings := filterLine(detector.Detect(line), lineNum)
+		findings := detector.Detect(line)
+		for j := range findings {
+			findings[j].Line = i + 1
+		}
 		allFindings = append(allFindings, findings...)
 		result[i] = redact.Redact(line, findings, style)
 	}
 
 	return strings.Join(result, "\n"), allFindings
-}
-
-// filterLine returns only findings for the given line number.
-func filterLine(findings []detect.Finding, lineNum int) []detect.Finding {
-	var filtered []detect.Finding
-	for _, f := range findings {
-		if f.Line == lineNum {
-			filtered = append(filtered, f)
-		}
-	}
-	return filtered
 }
