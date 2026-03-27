@@ -15,10 +15,12 @@ func redactString(val string, d *detect.Detector, style redact.Style, findings *
 	changed := false
 	for i, line := range lines {
 		found := d.Detect(line)
-		lineFindings := filterLineFindings(found, 1)
-		if len(lineFindings) > 0 {
-			*findings = append(*findings, lineFindings...)
-			lines[i] = redact.Redact(line, lineFindings, style)
+		if len(found) > 0 {
+			for j := range found {
+				found[j].Line = i + 1
+			}
+			*findings = append(*findings, found...)
+			lines[i] = redact.Redact(line, found, style)
 			changed = true
 		}
 	}
@@ -26,17 +28,6 @@ func redactString(val string, d *detect.Detector, style redact.Style, findings *
 		return strings.Join(lines, "\n"), true
 	}
 	return val, false
-}
-
-// filterLineFindings returns findings for a specific 1-based line number.
-func filterLineFindings(findings []detect.Finding, lineNum int) []detect.Finding {
-	var filtered []detect.Finding
-	for _, f := range findings {
-		if f.Line == lineNum {
-			filtered = append(filtered, f)
-		}
-	}
-	return filtered
 }
 
 // ProcessJSON parses JSON, redacts string values, and preserves structure.
