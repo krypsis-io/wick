@@ -1,6 +1,9 @@
 package format
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // Format represents a detected input format.
 type Format int
@@ -19,8 +22,8 @@ func Detect(content string) Format {
 		return FormatPlain
 	}
 
-	// JSON: starts with { or [
-	if trimmed[0] == '{' || trimmed[0] == '[' {
+	// JSON: starts with { or [ and is valid JSON
+	if (trimmed[0] == '{' || trimmed[0] == '[') && json.Valid([]byte(trimmed)) {
 		return FormatJSON
 	}
 
