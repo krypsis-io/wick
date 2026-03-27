@@ -70,7 +70,7 @@ func matchPII(line string, lineNum int) []Finding {
 			findings = append(findings, Finding{
 				Category: "pii",
 				RuleID:   p.ID,
-				Value:    line[m[0]:m[1]],
+				Value:    value,
 				Start:    m[0],
 				End:      m[1],
 				Line:     lineNum,
