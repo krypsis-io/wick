@@ -74,15 +74,12 @@ func run(cmd *cobra.Command, args []string) error {
 		if flagOut == "" {
 			return fmt.Errorf("--out is required with --dir")
 		}
-		if err := processDir(flagDir, flagOut, detector, style, outputFormat); err != nil {
+		n, err := processDir(flagDir, flagOut, detector, style, outputFormat)
+		foundCount = n
+		if err != nil {
 			return err
 		}
-		// processDir writes to files; exit code 0.
-		return nil
-	}
-
-	// File mode.
-	if len(flagFiles) > 0 {
+	} else if len(flagFiles) > 0 { // File mode.
 		n, err := processFiles(flagFiles, detector, style, outputFormat)
 		foundCount = n
 		if err != nil {
@@ -151,8 +148,9 @@ func processFiles(files []string, d *detect.Detector, style redact.Style, output
 	return total, nil
 }
 
-func processDir(dir, outDir string, d *detect.Detector, style redact.Style, outputFmt string) error {
-	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+func processDir(dir, outDir string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
+	total := 0
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -173,6 +171,7 @@ func processDir(dir, outDir string, d *detect.Detector, style redact.Style, outp
 		}
 
 		redacted, findings := format.Process(string(data), d, style)
+		total += len(findings)
 
 		if err := os.WriteFile(outPath, []byte(redacted), info.Mode()); err != nil {
 			return fmt.Errorf("writing %s: %w", outPath, err)
@@ -184,6 +183,7 @@ func processDir(dir, outDir string, d *detect.Detector, style redact.Style, outp
 		}
 		return nil
 	})
+	return total, err
 }
 
 func resolveStyle(cfg *config.Config) redact.Style {
