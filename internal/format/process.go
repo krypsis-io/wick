@@ -7,8 +7,8 @@ import (
 
 // Process auto-detects the input format and applies the appropriate redaction strategy.
 func Process(input string, detector *detect.Detector, style redact.Style) (string, []detect.Finding) {
-	fmt := Detect(input)
-	switch fmt {
+	detected := Detect(input)
+	switch detected {
 	case FormatJSON:
 		return ProcessJSON(input, detector, style)
 	case FormatYAML:
