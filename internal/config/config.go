@@ -32,11 +32,20 @@ func Load() (*Config, error) {
 	}
 
 	// Project config (walk up from cwd to find .wick.yaml).
+	// Unmarshal into a temp struct and merge so slices are appended, not replaced.
 	projectPath := findProjectConfig()
 	if projectPath != "" {
-		if err := loadFile(projectPath, cfg); err != nil {
+		var proj Config
+		if err := loadFile(projectPath, &proj); err != nil {
 			return nil, err
 		}
+		if proj.Style != "" {
+			cfg.Style = proj.Style
+		}
+		if proj.Format != "" {
+			cfg.Format = proj.Format
+		}
+		cfg.CustomPatterns = append(cfg.CustomPatterns, proj.CustomPatterns...)
 	}
 
 	return cfg, nil
