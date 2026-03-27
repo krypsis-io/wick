@@ -1,8 +1,8 @@
 package detect
 
-// Finding represents a detected secret or PII match in the input.
+// Finding represents a detected secret, PII, or custom pattern match in the input.
 type Finding struct {
-	Category string // "secret", "pii"
+	Category string // "secret", "pii", "custom"
 	RuleID   string // e.g., "aws-access-token", "email"
 	Value    string // the matched sensitive value
 	Start    int    // byte offset in the line
