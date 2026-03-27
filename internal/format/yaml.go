@@ -24,7 +24,9 @@ func ProcessYAML(input string, detector *detect.Detector, style redact.Style) (s
 	if err := enc.Encode(&doc); err != nil {
 		return ProcessPlain(input, detector, style)
 	}
-	enc.Close()
+	if err := enc.Close(); err != nil {
+		return ProcessPlain(input, detector, style)
+	}
 	return buf.String(), allFindings
 }
 
