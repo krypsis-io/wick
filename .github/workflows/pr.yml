@@ -60,4 +60,5 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
     uses: krypsis-io/.github/.github/workflows/semgrep.yml@main
