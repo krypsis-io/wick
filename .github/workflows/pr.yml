@@ -5,9 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   lint:
@@ -50,10 +48,16 @@ jobs:
         run: govulncheck ./...
 
   dependency-review:
+    permissions:
+      contents: read
+      pull-requests: write
     uses: krypsis-io/.github/.github/workflows/dependency-review.yml@main
 
   trivy:
     uses: krypsis-io/.github/.github/workflows/trivy.yml@main
 
   semgrep:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: krypsis-io/.github/.github/workflows/semgrep.yml@main
