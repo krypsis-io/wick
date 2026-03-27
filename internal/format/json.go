@@ -19,7 +19,16 @@ func ProcessJSON(input string, detector *detect.Detector, style redact.Style) (s
 	var allFindings []detect.Finding
 	redacted := walkJSON(data, detector, style, &allFindings)
 
-	out, err := json.MarshalIndent(redacted, "", indentOf(input))
+	indent := indentOf(input)
+	var (
+		out []byte
+		err error
+	)
+	if indent == "" {
+		out, err = json.Marshal(redacted)
+	} else {
+		out, err = json.MarshalIndent(redacted, "", indent)
+	}
 	if err != nil {
 		return ProcessPlain(input, detector, style)
 	}
@@ -53,14 +62,16 @@ func walkJSON(v any, d *detect.Detector, style redact.Style, findings *[]detect.
 }
 
 // indentOf tries to detect the indentation used in the original JSON.
+// Returns "" for single-line/minified input.
 func indentOf(input string) string {
 	lines := strings.Split(input, "\n")
-	if len(lines) > 1 {
-		second := lines[1]
-		indent := strings.TrimLeft(second, " \t")
-		if len(second) > len(indent) {
-			return second[:len(second)-len(indent)]
-		}
+	if len(lines) <= 1 {
+		return ""
 	}
-	return "  "
+	second := lines[1]
+	trimmed := strings.TrimLeft(second, " \t")
+	if len(second) > len(trimmed) {
+		return second[:len(second)-len(trimmed)]
+	}
+	return ""
 }
