@@ -34,7 +34,10 @@ func ProcessEnv(input string, detector *detect.Detector, style redact.Style) (st
 
 		found := detector.Detect(stripped)
 		if len(found) > 0 {
-			// Adjust finding offsets to account for key + "=" + prefix.
+			// Redact using original offsets (relative to stripped).
+			redacted := redact.Redact(stripped, found, style)
+			result[i] = key + prefix + redacted + suffix
+			// Adjust finding offsets for output (relative to full line).
 			offset := len(key) + len(prefix)
 			for j := range found {
 				found[j].Start += offset
@@ -42,8 +45,6 @@ func ProcessEnv(input string, detector *detect.Detector, style redact.Style) (st
 				found[j].Line = i + 1
 			}
 			allFindings = append(allFindings, found...)
-			redacted := redact.Redact(stripped, rebaseFindings(found, len(key)+len(prefix)), style)
-			result[i] = key + prefix + redacted + suffix
 		} else {
 			result[i] = line
 		}
@@ -59,16 +60,4 @@ func stripQuotes(s string) (stripped, prefix, suffix string) {
 		}
 	}
 	return s, "", ""
-}
-
-// rebaseFindings adjusts finding offsets by subtracting the given offset,
-// so they are relative to the stripped value string.
-func rebaseFindings(findings []detect.Finding, offset int) []detect.Finding {
-	rebased := make([]detect.Finding, len(findings))
-	for i, f := range findings {
-		rebased[i] = f
-		rebased[i].Start -= offset
-		rebased[i].End -= offset
-	}
-	return rebased
 }

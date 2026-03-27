@@ -67,40 +67,59 @@ func run(cmd *cobra.Command, args []string) error {
 
 	outputFormat := resolveFormat(cfg)
 
+	var foundCount int
+
 	// Directory mode.
 	if flagDir != "" {
 		if flagOut == "" {
 			return fmt.Errorf("--out is required with --dir")
 		}
-		return processDir(flagDir, flagOut, detector, style, outputFormat)
+		if err := processDir(flagDir, flagOut, detector, style, outputFormat); err != nil {
+			return err
+		}
+		// processDir writes to files; exit code 0.
+		return nil
 	}
 
 	// File mode.
 	if len(flagFiles) > 0 {
-		return processFiles(flagFiles, detector, style, outputFormat)
+		n, err := processFiles(flagFiles, detector, style, outputFormat)
+		foundCount = n
+		if err != nil {
+			return err
+		}
+	} else {
+		// Stdin mode (default).
+		stat, _ := os.Stdin.Stat()
+		if (stat.Mode() & os.ModeCharDevice) != 0 {
+			return fmt.Errorf("no input: pipe data to wick or use --file/--dir")
+		}
+
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+
+		n, err := processInput(string(data), detector, style, outputFormat)
+		foundCount = n
+		if err != nil {
+			return err
+		}
 	}
 
-	// Stdin mode (default).
-	stat, _ := os.Stdin.Stat()
-	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return fmt.Errorf("no input: pipe data to wick or use --file/--dir")
+	if foundCount > 0 {
+		os.Exit(1)
 	}
-
-	data, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		return fmt.Errorf("reading stdin: %w", err)
-	}
-
-	return processInput(string(data), detector, style, outputFormat)
+	return nil
 }
 
-func processInput(input string, d *detect.Detector, style redact.Style, outputFmt string) error {
+func processInput(input string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
 	redacted, findings := format.Process(input, d, style)
 
 	if outputFmt == "json" {
 		jsonOut, err := output.JSON(redacted, findings)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		fmt.Println(jsonOut)
 	} else {
@@ -113,23 +132,23 @@ func processInput(input string, d *detect.Detector, style redact.Style, outputFm
 		output.Summary(os.Stderr, findings)
 	}
 
-	if len(findings) > 0 {
-		os.Exit(1)
-	}
-	return nil
+	return len(findings), nil
 }
 
-func processFiles(files []string, d *detect.Detector, style redact.Style, outputFmt string) error {
+func processFiles(files []string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
+	total := 0
 	for _, f := range files {
 		data, err := os.ReadFile(f)
 		if err != nil {
-			return fmt.Errorf("reading %s: %w", f, err)
+			return total, fmt.Errorf("reading %s: %w", f, err)
 		}
-		if err := processInput(string(data), d, style, outputFmt); err != nil {
-			return err
+		n, err := processInput(string(data), d, style, outputFmt)
+		total += n
+		if err != nil {
+			return total, err
 		}
 	}
-	return nil
+	return total, nil
 }
 
 func processDir(dir, outDir string, d *detect.Detector, style redact.Style, outputFmt string) error {
