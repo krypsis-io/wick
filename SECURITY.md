@@ -19,6 +19,7 @@ Please include:
 - **Acknowledgment:** Within 48 hours
 - **Initial assessment:** Within 1 week
 - **Fix timeline:** Depends on severity, targeting under 30 days for critical issues
+- **Disclosure:** We will coordinate public disclosure with the reporter after a fix is released. Vulnerabilities are typically disclosed publicly 30 days after a patch is available, unless otherwise agreed with the reporter.
 
 ## Scope
 
