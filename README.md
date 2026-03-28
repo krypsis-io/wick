@@ -1,5 +1,11 @@
 # Wick
 
+[![CI](https://github.com/krypsis-io/wick/actions/workflows/pr.yml/badge.svg)](https://github.com/krypsis-io/wick/actions/workflows/pr.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/krypsis-io/wick)](https://goreportcard.com/report/github.com/krypsis-io/wick)
+[![Go 1.26+](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/krypsis-io/wick/badge)](https://securityscorecards.dev/viewer/?uri=github.com/krypsis-io/wick)
+
 Fast, zero-config secret and PII redaction for any text stream. Pipe anything through it.
 
 ## Install
@@ -48,15 +54,32 @@ Wick auto-detects JSON, YAML, and `.env` files. It redacts values while preservi
 
 ## Configuration
 
-Create `.wick.yaml` in your project root:
+Create `.wick.yaml` in your project root (or `~/.config/wick/config.yaml` for global defaults):
 
 ```yaml
+# Redaction style: redacted (default), stars, or custom="..."
 style: redacted
+
+# Output format: text (default) or json
+format: text
+
+# Custom detection patterns
 patterns:
   - name: internal-code
     regex: "ACME-\\d{4}"
+  - name: internal-ip
+    regex: "192\\.168\\.\\d+\\.\\d+"
 ```
+
+Project config overrides global. CLI flags override both. All fields are optional.
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Clean — no secrets or PII detected |
+| 1 | Secrets or PII detected |
 
 ## License
 
-[AGPL-3.0](LICENSE) — free for CLI usage and open-source projects. [Commercial license](mailto:licensing@krypsis.io) available for proprietary embedding.
+[AGPL-3.0](LICENSE)
