@@ -47,6 +47,14 @@ func init() {
 
 var errFindingsPresent = errors.New("findings present")
 
+const maxStdinBytes = 10 * 1024 * 1024
+
+type runOptions struct {
+	dir   string
+	files []string
+	out   string
+}
+
 // Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
@@ -82,7 +90,13 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	foundCount, err := executeRunMode(detector, style, outputFormat)
+	opts := runOptions{
+		dir:   flagDir,
+		files: flagFiles,
+		out:   flagOut,
+	}
+
+	foundCount, err := executeRunMode(opts, detector, style, outputFormat)
 	if err != nil {
 		return err
 	}
@@ -117,25 +131,25 @@ func newDetector(cfg *config.Config) (*detect.Detector, error) {
 	return detector, nil
 }
 
-func executeRunMode(detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
+func executeRunMode(opts runOptions, detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
 	switch {
-	case flagDir != "":
-		return executeDirMode(detector, style, outputFormat)
-	case len(flagFiles) > 0:
-		return processFiles(flagFiles, detector, style, outputFormat)
+	case opts.dir != "":
+		return executeDirMode(detector, style, opts.dir, opts.out, outputFormat)
+	case len(opts.files) > 0:
+		return processFiles(opts.files, detector, style, outputFormat)
 	default:
 		return processStdin(detector, style, outputFormat)
 	}
 }
 
-func executeDirMode(detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
-	if flagOut == "" {
+func executeDirMode(detector *detect.Detector, style redact.Style, dir, out, outputFormat string) (int, error) {
+	if out == "" {
 		return 0, fmt.Errorf("--out is required with --dir")
 	}
 	if outputFormat == "json" {
 		return 0, fmt.Errorf("--format json is not supported with --dir")
 	}
-	return processDir(flagDir, flagOut, detector, style, outputFormat)
+	return processDir(dir, out, detector, style, outputFormat)
 }
 
 func processStdin(detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
@@ -147,9 +161,13 @@ func processStdin(detector *detect.Detector, style redact.Style, outputFormat st
 		return 0, fmt.Errorf("no input: pipe data to wick or use --file/--dir")
 	}
 
-	data, err := io.ReadAll(os.Stdin)
+	reader := io.LimitReader(os.Stdin, maxStdinBytes+1)
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return 0, fmt.Errorf("reading stdin: %w", err)
+	}
+	if len(data) > maxStdinBytes {
+		return 0, fmt.Errorf("stdin exceeds maximum size of %d bytes", maxStdinBytes)
 	}
 
 	return processInput(string(data), detector, style, outputFormat)
