@@ -1,0 +1,70 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - id: wick
+    main: ./cmd/wick
+    binary: wick
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/krypsis-io/wick/internal/version.Version={{.Version}}
+      - -X github.com/krypsis-io/wick/internal/version.Commit={{.Commit}}
+      - -X github.com/krypsis-io/wick/internal/version.Date={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+brews:
+  - name: wick
+    repository:
+      owner: krypsis-io
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://krypsis.io/wick"
+    description: "Fast, zero-config secret and PII redaction for any text stream"
+    license: "AGPL-3.0"
+    test: |
+      system "#{bin}/wick", "version"
+    commit_msg_template: "chore: update wick to {{ .Tag }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+release:
+  github:
+    owner: krypsis-io
+    name: wick
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+  footer: |
+    **Full Changelog**: https://github.com/krypsis-io/wick/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+changelog:
+  use: github-native
