@@ -58,12 +58,8 @@ func Execute() {
 }
 
 func run(_ *cobra.Command, _ []string) error {
-	// Validate flag combinations.
-	if flagDir != "" && len(flagFiles) > 0 {
-		return fmt.Errorf("--dir and --file are mutually exclusive")
-	}
-	if flagOut != "" && flagDir == "" {
-		return fmt.Errorf("--out is only valid with --dir")
+	if err := validateRunFlags(); err != nil {
+		return err
 	}
 
 	cfg, err := config.Load()
@@ -75,14 +71,10 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	detector, err := detect.New()
+
+	detector, err := newDetector(cfg)
 	if err != nil {
-		return fmt.Errorf("detector: %w", err)
-	}
-	if len(cfg.CustomPatterns) > 0 {
-		if err := detector.SetCustomPatterns(cfg.CustomPatterns); err != nil {
-			return fmt.Errorf("config: %w", err)
-		}
+		return err
 	}
 
 	outputFormat, err := resolveFormat(cfg)
@@ -90,53 +82,77 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	var foundCount int
-
-	// Directory mode.
-	if flagDir != "" {
-		if flagOut == "" {
-			return fmt.Errorf("--out is required with --dir")
-		}
-		if outputFormat == "json" {
-			return fmt.Errorf("--format json is not supported with --dir")
-		}
-		n, err := processDir(flagDir, flagOut, detector, style, outputFormat)
-		foundCount = n
-		if err != nil {
-			return err
-		}
-	} else if len(flagFiles) > 0 { // File mode.
-		n, err := processFiles(flagFiles, detector, style, outputFormat)
-		foundCount = n
-		if err != nil {
-			return err
-		}
-	} else {
-		// Stdin mode (default).
-		stat, err := os.Stdin.Stat()
-		if err != nil {
-			return fmt.Errorf("stdin: %w", err)
-		}
-		if (stat.Mode() & os.ModeCharDevice) != 0 {
-			return fmt.Errorf("no input: pipe data to wick or use --file/--dir")
-		}
-
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return fmt.Errorf("reading stdin: %w", err)
-		}
-
-		n, err := processInput(string(data), detector, style, outputFormat)
-		foundCount = n
-		if err != nil {
-			return err
-		}
+	foundCount, err := executeRunMode(detector, style, outputFormat)
+	if err != nil {
+		return err
 	}
 
 	if foundCount > 0 {
 		return errFindingsPresent
 	}
 	return nil
+}
+
+func validateRunFlags() error {
+	if flagDir != "" && len(flagFiles) > 0 {
+		return fmt.Errorf("--dir and --file are mutually exclusive")
+	}
+	if flagOut != "" && flagDir == "" {
+		return fmt.Errorf("--out is only valid with --dir")
+	}
+	return nil
+}
+
+func newDetector(cfg *config.Config) (*detect.Detector, error) {
+	detector, err := detect.New()
+	if err != nil {
+		return nil, fmt.Errorf("detector: %w", err)
+	}
+	if len(cfg.CustomPatterns) == 0 {
+		return detector, nil
+	}
+	if err := detector.SetCustomPatterns(cfg.CustomPatterns); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+	return detector, nil
+}
+
+func executeRunMode(detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
+	switch {
+	case flagDir != "":
+		return executeDirMode(detector, style, outputFormat)
+	case len(flagFiles) > 0:
+		return processFiles(flagFiles, detector, style, outputFormat)
+	default:
+		return processStdin(detector, style, outputFormat)
+	}
+}
+
+func executeDirMode(detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
+	if flagOut == "" {
+		return 0, fmt.Errorf("--out is required with --dir")
+	}
+	if outputFormat == "json" {
+		return 0, fmt.Errorf("--format json is not supported with --dir")
+	}
+	return processDir(flagDir, flagOut, detector, style, outputFormat)
+}
+
+func processStdin(detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return 0, fmt.Errorf("stdin: %w", err)
+	}
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return 0, fmt.Errorf("no input: pipe data to wick or use --file/--dir")
+	}
+
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return 0, fmt.Errorf("reading stdin: %w", err)
+	}
+
+	return processInput(string(data), detector, style, outputFormat)
 }
 
 func processInput(input string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
