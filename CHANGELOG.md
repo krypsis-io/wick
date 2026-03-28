@@ -1,3 +1,9 @@
+## [0.1.1](https://github.com/krypsis-io/wick/compare/v0.1.0...v0.1.1) (2026-03-28)
+
+### Code Refactoring
+
+* reduce cmd complexity and release refactors ([#3](https://github.com/krypsis-io/wick/issues/3)) ([2e148fe](https://github.com/krypsis-io/wick/commit/2e148fe4edaa0cbc3f6b430b22201e4909be6519))
+
 # [0.1.0](https://github.com/krypsis-io/wick/compare/v0.0.0...v0.1.0) (2026-03-28)
 
 
