@@ -159,6 +159,13 @@ func processInput(input string, d *detect.Detector, style redact.Style, outputFm
 func processFiles(files []string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
 	total := 0
 	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil {
+			return total, fmt.Errorf("reading %s: %w", f, err)
+		}
+		if !info.Mode().IsRegular() {
+			return total, fmt.Errorf("%s is not a regular file", f)
+		}
 		data, err := os.ReadFile(f)
 		if err != nil {
 			return total, fmt.Errorf("reading %s: %w", f, err)
