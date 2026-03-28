@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -44,10 +45,14 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagSummary, "summary", false, "print redaction summary to stderr")
 }
 
+var errFindingsPresent = errors.New("findings present")
+
 // Execute runs the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		if !errors.Is(err, errFindingsPresent) {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }
@@ -129,7 +134,7 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	if foundCount > 0 {
-		os.Exit(1)
+		return errFindingsPresent
 	}
 	return nil
 }
