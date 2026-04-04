@@ -48,6 +48,7 @@ type SecretRule struct {
 	Entropy     float64
 	SecretGroup int
 	Allowlists  []compiledAllow
+	Multiline   bool // true if the regex spans multiple lines (contains \s)
 }
 
 type compiledAllow struct {
@@ -117,6 +118,7 @@ func parseGitleaksTOML(data []byte) ([]SecretRule, error) {
 			Entropy:     raw.Entropy,
 			SecretGroup: raw.SecretGroup,
 			Allowlists:  allows,
+			Multiline:   strings.Contains(raw.Regex, `\s`) || strings.Contains(raw.Regex, `\n`),
 		})
 	}
 	return rules, nil

@@ -115,6 +115,27 @@ func TestDetector_CustomPattern(t *testing.T) {
 	}
 }
 
+func TestDetector_MultilinePrivateKey(t *testing.T) {
+	d, err := New()
+	if err != nil {
+		t.Fatalf("failed to create detector: %v", err)
+	}
+
+	input := "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy5AkAb\n-----END RSA PRIVATE KEY-----"
+	findings := d.DetectMultiline(input)
+
+	found := false
+	for _, f := range findings {
+		if f.RuleID == "private-key" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected to find private-key via multiline detection, got findings: %+v", findings)
+	}
+}
+
 func TestShannonEntropy(t *testing.T) {
 	tests := []struct {
 		input   string
