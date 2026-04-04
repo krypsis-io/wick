@@ -1,3 +1,9 @@
+## [0.1.2](https://github.com/krypsis-io/wick/compare/v0.1.1...v0.1.2) (2026-04-04)
+
+### Bug Fixes
+
+* detect multiline secrets (PEM private key blocks) ([#7](https://github.com/krypsis-io/wick/issues/7)) ([27405a7](https://github.com/krypsis-io/wick/commit/27405a79f58b790b1d7ca5445251662eb3760f25))
+
 ## [0.1.1](https://github.com/krypsis-io/wick/compare/v0.1.0...v0.1.1) (2026-03-28)
 
 ### Code Refactoring
