@@ -48,6 +48,11 @@ type SecretRule struct {
 	Entropy     float64
 	SecretGroup int
 	Allowlists  []compiledAllow
+	// Multiline is true when the raw regex source contains \s or \n — a heuristic
+	// targeting patterns like PEM key blocks that span multiple lines. This is
+	// intentionally imprecise: "[^\s]" is a false positive; patterns relying on \r,
+	// (?s)/dotall flags, or literal whitespace are false negatives.
+	Multiline bool
 }
 
 type compiledAllow struct {
@@ -117,6 +122,7 @@ func parseGitleaksTOML(data []byte) ([]SecretRule, error) {
 			Entropy:     raw.Entropy,
 			SecretGroup: raw.SecretGroup,
 			Allowlists:  allows,
+			Multiline:   strings.Contains(raw.Regex, `\s`) || strings.Contains(raw.Regex, `\n`),
 		})
 	}
 	return rules, nil
@@ -166,36 +172,9 @@ func matchSecretRules(rules []SecretRule, line string, lineNum int) []Finding {
 
 		matches := rule.Regex.FindAllStringSubmatchIndex(line, -1)
 		for _, match := range matches {
-			// Determine the secret value based on secretGroup.
-			group := rule.SecretGroup
-			startIdx := group * 2
-			endIdx := startIdx + 1
-			if startIdx >= len(match) || match[startIdx] < 0 {
-				startIdx = 0
-				endIdx = 1
+			if f, ok := resolveMatch(rule, line, line, match, lineNum); ok {
+				findings = append(findings, f)
 			}
-			start := match[startIdx]
-			end := match[endIdx]
-			value := line[start:end]
-
-			// Entropy check.
-			if rule.Entropy > 0 && shannonEntropy(value) < rule.Entropy {
-				continue
-			}
-
-			// Allowlist check.
-			if isAllowed(rule.Allowlists, line, value) {
-				continue
-			}
-
-			findings = append(findings, Finding{
-				Category: "secret",
-				RuleID:   rule.ID,
-				Value:    value,
-				Start:    start,
-				End:      end,
-				Line:     lineNum,
-			})
 		}
 	}
 	return findings
