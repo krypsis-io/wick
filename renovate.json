@@ -8,5 +8,12 @@
   },
   "patch": {
     "automerge": true
-  }
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions"],
+      "commitMessagePrefix": "ci:",
+      "automerge": true
+    }
+  ]
 }
