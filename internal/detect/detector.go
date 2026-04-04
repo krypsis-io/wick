@@ -68,32 +68,59 @@ func (d *Detector) DetectMultiline(input string) []Finding {
 		}
 		matches := rule.Regex.FindAllStringSubmatchIndex(input, -1)
 		for _, match := range matches {
-			group := rule.SecretGroup
-			startIdx := group * 2
-			endIdx := startIdx + 1
-			if startIdx >= len(match) || match[startIdx] < 0 {
-				startIdx = 0
-				endIdx = 1
+			matchStart := match[0]
+			lineNum := strings.Count(input[:matchStart], "\n") + 1
+			// Pass only the matched line as lineContext so allowlist rules with
+			// RegexTarget == "line" match against the relevant line, not the full input.
+			lineContext := extractLine(input, matchStart)
+			if f, ok := resolveMatch(rule, input, lineContext, match, lineNum); ok {
+				all = append(all, f)
 			}
-			start := match[startIdx]
-			end := match[endIdx]
-			value := input[start:end]
-			if rule.Entropy > 0 && shannonEntropy(value) < rule.Entropy {
-				continue
-			}
-			if isAllowed(rule.Allowlists, input, value) {
-				continue
-			}
-			lineNum := strings.Count(input[:start], "\n") + 1
-			all = append(all, Finding{
-				Category: "secret",
-				RuleID:   rule.ID,
-				Value:    value,
-				Start:    start,
-				End:      end,
-				Line:     lineNum,
-			})
 		}
 	}
 	return all
+}
+
+// extractLine returns the single line within s that contains byte position pos.
+func extractLine(s string, pos int) string {
+	start := strings.LastIndex(s[:pos], "\n") + 1 // 0 when no prior newline
+	rest := s[start:]
+	if nl := strings.Index(rest, "\n"); nl >= 0 {
+		return rest[:nl]
+	}
+	return rest
+}
+
+// resolveMatch validates a regex submatch against entropy and allowlist rules and
+// returns a Finding if the match is accepted.
+//
+// text is the string being matched (a single line for per-line rules, the full input
+// for multiline rules). lineContext is passed to isAllowed for rules with
+// RegexTarget == "line": for per-line calls text == lineContext; for full-input calls
+// pass the specific matched line via extractLine so the allowlist sees the right scope.
+func resolveMatch(rule *SecretRule, text, lineContext string, match []int, lineNum int) (Finding, bool) {
+	group := rule.SecretGroup
+	startIdx := group * 2
+	endIdx := startIdx + 1
+	if startIdx >= len(match) || match[startIdx] < 0 {
+		startIdx = 0
+		endIdx = 1
+	}
+	start := match[startIdx]
+	end := match[endIdx]
+	value := text[start:end]
+	if rule.Entropy > 0 && shannonEntropy(value) < rule.Entropy {
+		return Finding{}, false
+	}
+	if isAllowed(rule.Allowlists, lineContext, value) {
+		return Finding{}, false
+	}
+	return Finding{
+		Category: "secret",
+		RuleID:   rule.ID,
+		Value:    value,
+		Start:    start,
+		End:      end,
+		Line:     lineNum,
+	}, true
 }
