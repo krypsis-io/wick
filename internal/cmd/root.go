@@ -9,21 +9,26 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/krypsis-io/wick/internal/config"
 	"github.com/krypsis-io/wick/detect"
 	"github.com/krypsis-io/wick/format"
+	"github.com/krypsis-io/wick/internal/config"
 	"github.com/krypsis-io/wick/internal/output"
 	"github.com/krypsis-io/wick/redact"
+	wick "github.com/krypsis-io/wick"
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagFiles   []string
-	flagDir     string
-	flagOut     string
-	flagStyle   string
-	flagFormat  string
-	flagSummary bool
+	flagFiles     []string
+	flagDir       string
+	flagOut       string
+	flagStyle     string
+	flagFormat    string
+	flagSummary   bool
+	flagTokenize  bool
+	flagRehydrate bool
+	flagKey       string
+	flagTokenFile string
 )
 
 var rootCmd = &cobra.Command{
@@ -43,6 +48,10 @@ func init() {
 	rootCmd.Flags().StringVar(&flagStyle, "style", "", "redaction style: redacted, stars, hash, or custom=\"...\"")
 	rootCmd.Flags().StringVar(&flagFormat, "format", "", "output format: text, json")
 	rootCmd.Flags().BoolVar(&flagSummary, "summary", false, "print redaction summary to stderr")
+	rootCmd.Flags().BoolVar(&flagTokenize, "tokenize", false, "redact with reversible tokens and write an encrypted token map")
+	rootCmd.Flags().BoolVar(&flagRehydrate, "rehydrate", false, "restore original values from a token map")
+	rootCmd.Flags().StringVar(&flagKey, "key", "", "base64-encoded AES-256 key for --tokenize / --rehydrate")
+	rootCmd.Flags().StringVar(&flagTokenFile, "token-file", ".wick-tokens.enc", "path to the encrypted token map file")
 }
 
 var errFindingsPresent = errors.New("findings present")
@@ -70,9 +79,19 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Rehydrate is a separate mode: read stdin, restore originals, done.
+	if flagRehydrate {
+		return runRehydrate()
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
+	}
+
+	// Tokenize mode: use reversible token replacer instead of normal style.
+	if flagTokenize {
+		return runTokenize(cfg)
 	}
 
 	replacer, err := resolveReplacer(cfg)
@@ -107,7 +126,103 @@ func run(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
+func runTokenize(cfg *config.Config) error {
+	if len(flagFiles) > 0 || flagDir != "" {
+		return fmt.Errorf("--tokenize only supports stdin input")
+	}
+
+	input, err := readStdin()
+	if err != nil {
+		return err
+	}
+
+	// Resolve or generate the key.
+	keyStr := flagKey
+	if keyStr == "" {
+		var genErr error
+		keyStr, genErr = wick.GenerateKey()
+		if genErr != nil {
+			return genErr
+		}
+		fmt.Fprintf(os.Stderr, "wick: key: %s\n", keyStr)
+	}
+
+	key, err := wick.DecodeKey(keyStr)
+	if err != nil {
+		return err
+	}
+
+	var opts []wick.Option
+	if len(cfg.CustomPatterns) > 0 {
+		opts = append(opts, wick.WithCustomPatterns(cfg.CustomPatterns))
+	}
+
+	redacted, tm, err := wick.Dehydrate(input, key, opts...)
+	if err != nil {
+		return err
+	}
+
+	if err := wick.SaveTokenMap(tm, key, flagTokenFile); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "wick: token map written to %s\n", flagTokenFile)
+
+	fmt.Print(redacted)
+	return nil
+}
+
+func runRehydrate() error {
+	if flagKey == "" {
+		return fmt.Errorf("--rehydrate requires --key")
+	}
+
+	key, err := wick.DecodeKey(flagKey)
+	if err != nil {
+		return err
+	}
+
+	input, err := readStdin()
+	if err != nil {
+		return err
+	}
+
+	tm, err := wick.LoadTokenMap(key, flagTokenFile)
+	if err != nil {
+		return err
+	}
+
+	restored, err := wick.Rehydrate(input, tm)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(restored)
+	return nil
+}
+
+func readStdin() (string, error) {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return "", fmt.Errorf("stdin: %w", err)
+	}
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return "", fmt.Errorf("no input: pipe data to wick or use --file/--dir")
+	}
+	reader := io.LimitReader(os.Stdin, maxStdinBytes+1)
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("reading stdin: %w", err)
+	}
+	if len(data) > maxStdinBytes {
+		return "", fmt.Errorf("stdin exceeds maximum size of %d bytes", maxStdinBytes)
+	}
+	return string(data), nil
+}
+
 func validateRunFlags() error {
+	if flagTokenize && flagRehydrate {
+		return fmt.Errorf("--tokenize and --rehydrate are mutually exclusive")
+	}
 	if flagDir != "" && len(flagFiles) > 0 {
 		return fmt.Errorf("--dir and --file are mutually exclusive")
 	}
@@ -153,24 +268,11 @@ func executeDirMode(detector *detect.Detector, replacer redact.Replacer, dir, ou
 }
 
 func processStdin(detector *detect.Detector, replacer redact.Replacer, outputFormat string) (int, error) {
-	stat, err := os.Stdin.Stat()
+	data, err := readStdin()
 	if err != nil {
-		return 0, fmt.Errorf("stdin: %w", err)
+		return 0, err
 	}
-	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return 0, fmt.Errorf("no input: pipe data to wick or use --file/--dir")
-	}
-
-	reader := io.LimitReader(os.Stdin, maxStdinBytes+1)
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return 0, fmt.Errorf("reading stdin: %w", err)
-	}
-	if len(data) > maxStdinBytes {
-		return 0, fmt.Errorf("stdin exceeds maximum size of %d bytes", maxStdinBytes)
-	}
-
-	return processInput(string(data), detector, replacer, outputFormat)
+	return processInput(data, detector, replacer, outputFormat)
 }
 
 func processInput(input string, d *detect.Detector, replacer redact.Replacer, outputFmt string) (int, error) {
