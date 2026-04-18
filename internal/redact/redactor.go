@@ -7,46 +7,34 @@ import (
 	"github.com/krypsis-io/wick/internal/detect"
 )
 
-// span represents a byte range to redact within a single line.
-type span struct {
-	start int
-	end   int
-}
-
-// Redact replaces all finding matches in the input line with the style's replacement string.
+// Redact replaces all finding matches in the input line using the given Replacer.
 // Findings must all belong to the same line. Overlapping ranges are merged.
-func Redact(line string, findings []detect.Finding, style Style) string {
+func Redact(line string, findings []detect.Finding, replacer Replacer) string {
 	if len(findings) == 0 {
 		return line
 	}
 
-	spans := make([]span, len(findings))
+	// Build replacement strings per finding before merging spans.
+	type replacementSpan struct {
+		start       int
+		end         int
+		replacement string
+	}
+
+	spans := make([]replacementSpan, len(findings))
 	for i, f := range findings {
-		spans[i] = span{start: f.Start, end: f.End}
+		spans[i] = replacementSpan{
+			start:       f.Start,
+			end:         f.End,
+			replacement: replacer.Replace(line[f.Start:f.End], f),
+		}
 	}
-	merged := mergeSpans(spans)
 
-	replacement := style.Replacement()
-	var result []byte
-	prev := 0
-	for _, s := range merged {
-		result = append(result, line[prev:s.start]...)
-		result = append(result, replacement...)
-		prev = s.end
-	}
-	result = append(result, line[prev:]...)
-	return string(result)
-}
-
-// mergeSpans sorts and merges overlapping byte ranges.
-func mergeSpans(spans []span) []span {
-	if len(spans) == 0 {
-		return nil
-	}
+	// Sort and merge overlapping spans. For merged spans, use the first replacement.
 	sort.Slice(spans, func(i, j int) bool {
 		return spans[i].start < spans[j].start
 	})
-	merged := []span{spans[0]}
+	merged := []replacementSpan{spans[0]}
 	for _, s := range spans[1:] {
 		last := &merged[len(merged)-1]
 		if s.start <= last.end {
@@ -57,5 +45,15 @@ func mergeSpans(spans []span) []span {
 			merged = append(merged, s)
 		}
 	}
-	return merged
+
+	var result []byte
+	prev := 0
+	for _, s := range merged {
+		result = append(result, line[prev:s.start]...)
+		result = append(result, s.replacement...)
+		prev = s.end
+	}
+	result = append(result, line[prev:]...)
+	return string(result)
 }
+

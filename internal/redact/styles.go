@@ -1,34 +1,43 @@
 package redact
 
-// Style determines how redacted values are replaced.
-type Style int
+import "github.com/krypsis-io/wick/internal/detect"
 
-// Built-in redaction styles.
-const (
-	StyleRedacted Style = iota // [REDACTED]
-	StyleStars                 // ***
-)
-
-// CustomStyle returns a Style that uses a custom replacement string.
-// Stored as a negative value to distinguish from named styles.
-// Use Replacement() to get the actual string.
-func CustomStyle() Style { return Style(-1) }
-
-var customReplacement string
-
-// SetCustomReplacement sets the string used by CustomStyle.
-func SetCustomReplacement(s string) {
-	customReplacement = s
+// Replacer determines how detected values are replaced in redacted output.
+// Static styles ignore the arguments and return a fixed string. Context-aware
+// replacers (hash, tokenize) use the value and finding to produce per-match output.
+type Replacer interface {
+	Replace(value string, finding detect.Finding) string
 }
 
-// Replacement returns the replacement string for a style.
-func (s Style) Replacement() string {
-	switch s {
-	case StyleStars:
-		return "***"
-	case Style(-1):
-		return customReplacement
-	default:
-		return "[REDACTED]"
+type staticReplacer struct {
+	replacement string
+}
+
+func (r staticReplacer) Replace(string, detect.Finding) string {
+	return r.replacement
+}
+
+// Replacement returns the static replacement string, or empty for dynamic replacers.
+func (r staticReplacer) Replacement() string {
+	return r.replacement
+}
+
+// Predefined replacers.
+var (
+	Redacted Replacer = staticReplacer{"[REDACTED]"}
+	Stars    Replacer = staticReplacer{"***"}
+)
+
+// Custom returns a Replacer that always uses the given string.
+func Custom(replacement string) Replacer {
+	return staticReplacer{replacement}
+}
+
+// StaticReplacement returns the fixed replacement string if r is a static
+// replacer, or empty string and false otherwise.
+func StaticReplacement(r Replacer) (string, bool) {
+	if sr, ok := r.(staticReplacer); ok {
+		return sr.replacement, true
 	}
+	return "", false
 }

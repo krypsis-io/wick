@@ -75,7 +75,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("config: %w", err)
 	}
 
-	style, err := resolveStyle(cfg)
+	replacer, err := resolveReplacer(cfg)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func run(_ *cobra.Command, _ []string) error {
 		out:   flagOut,
 	}
 
-	foundCount, err := executeRunMode(opts, detector, style, outputFormat)
+	foundCount, err := executeRunMode(opts, detector, replacer, outputFormat)
 	if err != nil {
 		return err
 	}
@@ -131,28 +131,28 @@ func newDetector(cfg *config.Config) (*detect.Detector, error) {
 	return detector, nil
 }
 
-func executeRunMode(opts runOptions, detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
+func executeRunMode(opts runOptions, detector *detect.Detector, replacer redact.Replacer, outputFormat string) (int, error) {
 	switch {
 	case opts.dir != "":
-		return executeDirMode(detector, style, opts.dir, opts.out, outputFormat)
+		return executeDirMode(detector, replacer, opts.dir, opts.out, outputFormat)
 	case len(opts.files) > 0:
-		return processFiles(opts.files, detector, style, outputFormat)
+		return processFiles(opts.files, detector, replacer, outputFormat)
 	default:
-		return processStdin(detector, style, outputFormat)
+		return processStdin(detector, replacer, outputFormat)
 	}
 }
 
-func executeDirMode(detector *detect.Detector, style redact.Style, dir, out, outputFormat string) (int, error) {
+func executeDirMode(detector *detect.Detector, replacer redact.Replacer, dir, out, outputFormat string) (int, error) {
 	if out == "" {
 		return 0, fmt.Errorf("--out is required with --dir")
 	}
 	if outputFormat == "json" {
 		return 0, fmt.Errorf("--format json is not supported with --dir")
 	}
-	return processDir(dir, out, detector, style, outputFormat)
+	return processDir(dir, out, detector, replacer, outputFormat)
 }
 
-func processStdin(detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
+func processStdin(detector *detect.Detector, replacer redact.Replacer, outputFormat string) (int, error) {
 	stat, err := os.Stdin.Stat()
 	if err != nil {
 		return 0, fmt.Errorf("stdin: %w", err)
@@ -170,11 +170,11 @@ func processStdin(detector *detect.Detector, style redact.Style, outputFormat st
 		return 0, fmt.Errorf("stdin exceeds maximum size of %d bytes", maxStdinBytes)
 	}
 
-	return processInput(string(data), detector, style, outputFormat)
+	return processInput(string(data), detector, replacer, outputFormat)
 }
 
-func processInput(input string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
-	redacted, findings := format.Process(input, d, style)
+func processInput(input string, d *detect.Detector, replacer redact.Replacer, outputFmt string) (int, error) {
+	redacted, findings := format.Process(input, d, replacer)
 
 	if outputFmt == "json" {
 		jsonOut, err := output.JSON(redacted, findings)
@@ -185,7 +185,7 @@ func processInput(input string, d *detect.Detector, style redact.Style, outputFm
 	} else {
 		// format.Process already redacted the text; for TTY colorization
 		// we re-process from the original input.
-		fmt.Print(output.Terminal(input, redacted, findings, style))
+		fmt.Print(output.Terminal(input, redacted, findings, replacer))
 	}
 
 	if flagSummary {
@@ -195,7 +195,7 @@ func processInput(input string, d *detect.Detector, style redact.Style, outputFm
 	return len(findings), nil
 }
 
-func processFiles(files []string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
+func processFiles(files []string, d *detect.Detector, replacer redact.Replacer, outputFmt string) (int, error) {
 	total := 0
 	for _, f := range files {
 		info, err := os.Stat(f)
@@ -209,7 +209,7 @@ func processFiles(files []string, d *detect.Detector, style redact.Style, output
 		if err != nil {
 			return total, fmt.Errorf("reading %s: %w", f, err)
 		}
-		n, err := processInput(string(data), d, style, outputFmt)
+		n, err := processInput(string(data), d, replacer, outputFmt)
 		total += n
 		if err != nil {
 			return total, err
@@ -218,7 +218,7 @@ func processFiles(files []string, d *detect.Detector, style redact.Style, output
 	return total, nil
 }
 
-func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ string) (int, error) {
+func processDir(dir, outDir string, d *detect.Detector, replacer redact.Replacer, _ string) (int, error) {
 	dirAbs, err := filepath.Abs(dir)
 	if err != nil {
 		return 0, fmt.Errorf("resolving dir path: %w", err)
@@ -255,7 +255,7 @@ func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ st
 			return err
 		}
 
-		redacted, findings := format.Process(string(data), d, style)
+		redacted, findings := format.Process(string(data), d, replacer)
 		total += len(findings)
 
 		if err := os.WriteFile(outPath, []byte(redacted), info.Mode()); err != nil {
@@ -271,21 +271,20 @@ func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ st
 	return total, err
 }
 
-func resolveStyle(cfg *config.Config) (redact.Style, error) {
+func resolveReplacer(cfg *config.Config) (redact.Replacer, error) {
 	s := cfg.Style
 	if flagStyle != "" {
 		s = flagStyle
 	}
 	switch {
 	case s == "" || s == "redacted":
-		return redact.StyleRedacted, nil
+		return redact.Redacted, nil
 	case s == "stars":
-		return redact.StyleStars, nil
+		return redact.Stars, nil
 	case strings.HasPrefix(s, "custom="):
-		redact.SetCustomReplacement(strings.TrimPrefix(s, "custom="))
-		return redact.CustomStyle(), nil
+		return redact.Custom(strings.TrimPrefix(s, "custom=")), nil
 	default:
-		return 0, fmt.Errorf("unknown style %q: use redacted, stars, or custom=\"...\"", s)
+		return nil, fmt.Errorf("unknown style %q: use redacted, stars, or custom=\"...\"", s)
 	}
 }
 

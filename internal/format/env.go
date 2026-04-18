@@ -8,7 +8,7 @@ import (
 )
 
 // ProcessEnv parses KEY=VALUE lines, redacting only the VALUE portion.
-func ProcessEnv(input string, detector *detect.Detector, style redact.Style) (string, []detect.Finding) {
+func ProcessEnv(input string, detector *detect.Detector, replacer redact.Replacer) (string, []detect.Finding) {
 	lines := strings.Split(input, "\n")
 	var allFindings []detect.Finding
 	result := make([]string, len(lines))
@@ -32,16 +32,30 @@ func ProcessEnv(input string, detector *detect.Detector, style redact.Style) (st
 		// Strip surrounding quotes for detection, but preserve them.
 		stripped, prefix, suffix := stripQuotes(value)
 
-		found := detector.Detect(stripped)
+		// Detect against the full line so keyword-based rules (e.g.,
+		// aws_secret_access_key) can see the key name for pre-filtering.
+		// Then filter findings to only those within the value portion.
+		valueStart := len(key) + len(prefix)
+		valueEnd := valueStart + len(stripped)
+		allFound := detector.Detect(line)
+		var found []detect.Finding
+		for _, f := range allFound {
+			if f.Start >= valueStart && f.End <= valueEnd {
+				// Shift offsets to be relative to stripped value.
+				f.Start -= valueStart
+				f.End -= valueStart
+				found = append(found, f)
+			}
+		}
+
 		if len(found) > 0 {
-			// Redact using original offsets (relative to stripped).
-			redacted := redact.Redact(stripped, found, style)
+			// Redact using offsets relative to stripped value.
+			redacted := redact.Redact(stripped, found, replacer)
 			result[i] = key + prefix + redacted + suffix
 			// Adjust finding offsets for output (relative to full line).
-			offset := len(key) + len(prefix)
 			for j := range found {
-				found[j].Start += offset
-				found[j].End += offset
+				found[j].Start += valueStart
+				found[j].End += valueStart
 				found[j].Line = i + 1
 			}
 			allFindings = append(allFindings, found...)
