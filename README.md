@@ -12,6 +12,8 @@ When you are troubleshooting, you often need to paste logs, configs, stack trace
 
 Wick sits in that path. Pipe text through it, or point it at files and directories, and it will redact sensitive values while preserving the surrounding content so the result is still useful.
 
+![Wick demo](assets/demo.gif)
+
 ## Why It Exists
 
 Most teams do not need another secret scanner dashboard. They need a fast way to sanitize raw troubleshooting output before it gets pasted into an LLM or posted somewhere other people can see it.
