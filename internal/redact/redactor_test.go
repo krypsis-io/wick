@@ -11,7 +11,7 @@ func TestRedact_SingleFinding(t *testing.T) {
 	findings := []detect.Finding{
 		{Start: 4, End: 24, Category: "secret", RuleID: "aws"},
 	}
-	got := Redact(line, findings, StyleRedacted)
+	got := Redact(line, findings, Redacted)
 	want := "key=[REDACTED] done"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -23,7 +23,7 @@ func TestRedact_Stars(t *testing.T) {
 	findings := []detect.Finding{
 		{Start: 7, End: 21, Category: "pii", RuleID: "email"},
 	}
-	got := Redact(line, findings, StyleStars)
+	got := Redact(line, findings, Stars)
 	want := "email: ***"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -36,7 +36,7 @@ func TestRedact_Overlapping(t *testing.T) {
 		{Start: 2, End: 6},
 		{Start: 4, End: 8},
 	}
-	got := Redact(line, findings, StyleRedacted)
+	got := Redact(line, findings, Redacted)
 	want := "AB[REDACTED]IJ"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -45,19 +45,19 @@ func TestRedact_Overlapping(t *testing.T) {
 
 func TestRedact_NoFindings(t *testing.T) {
 	line := "nothing here"
-	got := Redact(line, nil, StyleRedacted)
+	got := Redact(line, nil, Redacted)
 	if got != line {
 		t.Errorf("got %q, want %q", got, line)
 	}
 }
 
 func TestRedact_CustomStyle(t *testing.T) {
-	SetCustomReplacement("XXXXX")
+	replacer := Custom("XXXXX")
 	line := "secret=mysecret"
 	findings := []detect.Finding{
 		{Start: 7, End: 15},
 	}
-	got := Redact(line, findings, CustomStyle())
+	got := Redact(line, findings, replacer)
 	want := "secret=XXXXX"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)

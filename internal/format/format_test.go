@@ -42,7 +42,7 @@ func TestDetectFormat(t *testing.T) {
 func TestProcessJSON(t *testing.T) {
 	d := newDetector(t)
 	input := `{"api_key": "AKIAZ5GMHYJKLMNOPQRS", "name": "test"}`
-	output, findings := ProcessJSON(input, d, redact.StyleRedacted)
+	output, findings := ProcessJSON(input, d, redact.Redacted)
 
 	if len(findings) == 0 {
 		t.Fatal("expected findings")
@@ -61,7 +61,7 @@ func TestProcessJSON(t *testing.T) {
 func TestProcessEnv(t *testing.T) {
 	d := newDetector(t)
 	input := "# Config\nAPI_KEY=AKIAZ5GMHYJKLMNOPQRS\nDB_NAME=mydb"
-	output, findings := ProcessEnv(input, d, redact.StyleRedacted)
+	output, findings := ProcessEnv(input, d, redact.Redacted)
 
 	if len(findings) == 0 {
 		t.Fatal("expected findings")
@@ -80,7 +80,7 @@ func TestProcessEnv(t *testing.T) {
 func TestProcessPlain(t *testing.T) {
 	d := newDetector(t)
 	input := "Contact admin@acme.com from 10.0.1.42"
-	output, findings := ProcessPlain(input, d, redact.StyleRedacted)
+	output, findings := ProcessPlain(input, d, redact.Redacted)
 
 	if len(findings) < 2 {
 		t.Fatalf("expected at least 2 findings, got %d", len(findings))
