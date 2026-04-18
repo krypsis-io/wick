@@ -4,7 +4,7 @@ package redact
 import (
 	"sort"
 
-	"github.com/krypsis-io/wick/internal/detect"
+	"github.com/krypsis-io/wick/detect"
 )
 
 // Redact replaces all finding matches in the input line using the given Replacer.

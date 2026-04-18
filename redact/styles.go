@@ -1,6 +1,6 @@
 package redact
 
-import "github.com/krypsis-io/wick/internal/detect"
+import "github.com/krypsis-io/wick/detect"
 
 // Replacer determines how detected values are replaced in redacted output.
 // Static styles ignore the arguments and return a fixed string. Context-aware

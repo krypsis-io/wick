@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 )
 
 // redactString detects and redacts secrets/PII in a string value line by line,

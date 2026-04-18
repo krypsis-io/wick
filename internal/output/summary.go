@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/krypsis-io/wick/internal/detect"
+	"github.com/krypsis-io/wick/detect"
 )
 
 // Summary writes a human-readable summary of findings to the given writer (typically stderr).

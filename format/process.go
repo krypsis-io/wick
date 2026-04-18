@@ -1,8 +1,8 @@
 package format
 
 import (
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 )
 
 // Process auto-detects the input format and applies the appropriate redaction strategy.

@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	"github.com/krypsis-io/wick/internal/config"
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/format"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/format"
 	"github.com/krypsis-io/wick/internal/output"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/redact"
 	"github.com/spf13/cobra"
 )
 

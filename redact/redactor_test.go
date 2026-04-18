@@ -3,7 +3,7 @@ package redact
 import (
 	"testing"
 
-	"github.com/krypsis-io/wick/internal/detect"
+	"github.com/krypsis-io/wick/detect"
 )
 
 func TestRedact_SingleFinding(t *testing.T) {

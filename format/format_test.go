@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 )
 
 func newDetector(t *testing.T) *detect.Detector {

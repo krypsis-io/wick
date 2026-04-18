@@ -4,7 +4,7 @@ package output
 import (
 	"encoding/json"
 
-	"github.com/krypsis-io/wick/internal/detect"
+	"github.com/krypsis-io/wick/detect"
 )
 
 type jsonOutput struct {

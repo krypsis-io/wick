@@ -3,8 +3,8 @@ package format
 import (
 	"strings"
 
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 )
 
 // ProcessPlain detects and redacts secrets/PII line by line.
