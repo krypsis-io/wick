@@ -1,2 +1,7 @@
-# Demo tape contains intentional fake secrets for the VHS recording
+# Intentional fake secrets for the VHS demo recording
 assets/demo.tape
+
+# Test files containing intentional fake secrets for detection validation
+internal/detect/detector_test.go
+internal/format/format_test.go
+internal/redact/redactor_test.go

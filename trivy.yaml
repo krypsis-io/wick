@@ -1,0 +1,4 @@
+secret:
+  # Demo tape contains intentional fake secrets for the VHS recording
+  exclude-paths:
+    - "assets/demo.tape"
