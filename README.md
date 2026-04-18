@@ -20,7 +20,7 @@ Wick is built for that moment:
 
 - `kubectl logs` or stack traces before pasting them into ChatGPT or Claude
 - prompts or context blocks that include company-specific names, domains, or IP ranges
-- `kubectl logs` before sending a snippet to someone else
+- `kubectl describe` or `kubectl get` output before sending a snippet to someone else
 - logs or config fragments before posting on GitHub Issues, PR threads, Reddit, Discord, or Stack Overflow
 - `.env`, YAML, or JSON config before sharing it internally
 - ad hoc terminal output that is too risky to trust by inspection
