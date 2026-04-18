@@ -33,10 +33,12 @@ Type "cat /tmp/wick-demo.log"
 Enter
 Sleep 3s
 
+Enter
 Type "cat /tmp/wick-demo.log | wick --summary"
 Enter
 Sleep 4s
 
+Enter
 Type "# .env file with secrets"
 Enter
 Sleep 1s
@@ -45,6 +47,7 @@ Type "cat /tmp/wick-demo.env"
 Enter
 Sleep 3s
 
+Enter
 Type "cat /tmp/wick-demo.env | wick --summary"
 Enter
 Sleep 5s
