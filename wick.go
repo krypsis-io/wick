@@ -18,6 +18,8 @@
 package wick
 
 import (
+	"strings"
+
 	"github.com/krypsis-io/wick/detect"
 	"github.com/krypsis-io/wick/format"
 	"github.com/krypsis-io/wick/redact"
@@ -72,6 +74,51 @@ func buildReport(findings []detect.Finding) Report {
 	}
 	r.Total = len(findings)
 	return r
+}
+
+// Dehydrate redacts input using reversible token replacement and returns the
+// redacted text along with a TokenMap that can be used to restore the original.
+// The token map is encrypted with the provided AES-256 key (see GenerateKey).
+// Each unique value gets a stable token of the form [RULEID-N], so the same
+// value always maps to the same token within a single Dehydrate call.
+func Dehydrate(input string, key []byte, opts ...Option) (string, TokenMap, error) {
+	cfg := defaultConfig()
+	for _, o := range opts {
+		o.apply(cfg)
+	}
+
+	detector, err := buildDetector(cfg)
+	if err != nil {
+		return "", TokenMap{}, err
+	}
+
+	tr := redact.NewTokenizeReplacer()
+	redacted, _ := format.Process(input, detector, tr)
+
+	entries := tr.Entries()
+	tm := TokenMap{entries: make(map[string]*TokenEntry, len(entries))}
+	for token, e := range entries {
+		tm.entries[token] = &TokenEntry{
+			Original:    e.Original,
+			Replacement: e.Replacement,
+			Category:    e.Category,
+			RuleID:      e.RuleID,
+			Count:       e.Count,
+		}
+	}
+
+	return redacted, tm, nil
+}
+
+// Rehydrate restores original values in a previously dehydrated string using
+// the provided TokenMap. It performs a simple string replacement of each token
+// with its original value.
+func Rehydrate(input string, tm TokenMap) (string, error) {
+	result := input
+	for token, entry := range tm.entries {
+		result = strings.ReplaceAll(result, token, entry.Original)
+	}
+	return result, nil
 }
 
 func defaultConfig() *config {
