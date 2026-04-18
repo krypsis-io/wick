@@ -3,8 +3,8 @@ package format
 import (
 	"bytes"
 
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 	"gopkg.in/yaml.v3"
 )
 
