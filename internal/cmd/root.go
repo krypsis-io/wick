@@ -40,7 +40,7 @@ func init() {
 	rootCmd.Flags().StringSliceVar(&flagFiles, "file", nil, "input file(s) to redact")
 	rootCmd.Flags().StringVar(&flagDir, "dir", "", "directory of files to redact")
 	rootCmd.Flags().StringVar(&flagOut, "out", "", "output directory for --dir mode")
-	rootCmd.Flags().StringVar(&flagStyle, "style", "", "redaction style: redacted, stars, or custom=\"...\"")
+	rootCmd.Flags().StringVar(&flagStyle, "style", "", "redaction style: redacted, stars, hash, or custom=\"...\"")
 	rootCmd.Flags().StringVar(&flagFormat, "format", "", "output format: text, json")
 	rootCmd.Flags().BoolVar(&flagSummary, "summary", false, "print redaction summary to stderr")
 }
@@ -281,10 +281,12 @@ func resolveReplacer(cfg *config.Config) (redact.Replacer, error) {
 		return redact.Redacted, nil
 	case s == "stars":
 		return redact.Stars, nil
+	case s == "hash":
+		return redact.Hash, nil
 	case strings.HasPrefix(s, "custom="):
 		return redact.Custom(strings.TrimPrefix(s, "custom=")), nil
 	default:
-		return nil, fmt.Errorf("unknown style %q: use redacted, stars, or custom=\"...\"", s)
+		return nil, fmt.Errorf("unknown style %q: use redacted, stars, hash, or custom=\"...\"", s)
 	}
 }
 
