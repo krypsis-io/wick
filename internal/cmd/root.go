@@ -25,6 +25,7 @@ var (
 	flagStyle     string
 	flagFormat    string
 	flagSummary   bool
+	flagReport    bool
 	flagTokenize  bool
 	flagRehydrate bool
 	flagKey       string
@@ -48,6 +49,7 @@ func init() {
 	rootCmd.Flags().StringVar(&flagStyle, "style", "", "redaction style: redacted, stars, hash, or custom=\"...\"")
 	rootCmd.Flags().StringVar(&flagFormat, "format", "", "output format: text, json")
 	rootCmd.Flags().BoolVar(&flagSummary, "summary", false, "print redaction summary to stderr")
+	rootCmd.Flags().BoolVar(&flagReport, "report", false, "print detailed per-finding report to stderr")
 	rootCmd.Flags().BoolVar(&flagTokenize, "tokenize", false, "redact with reversible tokens and write an encrypted token map")
 	rootCmd.Flags().BoolVar(&flagRehydrate, "rehydrate", false, "restore original values from a token map")
 	rootCmd.Flags().StringVar(&flagKey, "key", "", "base64-encoded AES-256 key for --tokenize / --rehydrate")
@@ -321,6 +323,9 @@ func processInput(input string, d *detect.Detector, replacer redact.Replacer, ou
 
 	if flagSummary {
 		output.Summary(os.Stderr, findings)
+	}
+	if flagReport {
+		output.Report(os.Stderr, findings)
 	}
 
 	return len(findings), nil
