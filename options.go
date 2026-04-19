@@ -9,6 +9,8 @@ import (
 type config struct {
 	replacer       redact.Replacer
 	customPatterns []detect.CustomPattern
+	allowlist      []detect.AllowlistEntry
+	blocklist      []detect.CustomPattern
 }
 
 // Option configures a Redact call.
@@ -32,5 +34,21 @@ func WithReplacer(r redact.Replacer) Option {
 func WithCustomPatterns(patterns []detect.CustomPattern) Option {
 	return optionFunc(func(c *config) {
 		c.customPatterns = append(c.customPatterns, patterns...)
+	})
+}
+
+// WithAllowlist adds known-safe patterns that will never be redacted.
+// Each entry can be an exact string or a regex (set Regex: true).
+func WithAllowlist(entries []detect.AllowlistEntry) Option {
+	return optionFunc(func(c *config) {
+		c.allowlist = append(c.allowlist, entries...)
+	})
+}
+
+// WithBlocklist adds patterns that are always redacted, even if not matched
+// by built-in rules. Each entry is treated as a custom detection pattern.
+func WithBlocklist(entries []detect.CustomPattern) Option {
+	return optionFunc(func(c *config) {
+		c.blocklist = append(c.blocklist, entries...)
 	})
 }

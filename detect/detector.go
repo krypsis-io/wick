@@ -9,6 +9,7 @@ import (
 type Detector struct {
 	secretRules    []SecretRule
 	customPatterns []compiledCustom
+	allowlist      []compiledAllowlistEntry
 }
 
 // New creates a Detector with the embedded Gitleaks patterns and built-in PII rules.
@@ -41,7 +42,7 @@ func (d *Detector) Detect(input string) []Finding {
 		all = append(all, matchPII(line, lineNum)...)
 		all = append(all, matchCustom(d.customPatterns, line, lineNum)...)
 	}
-	return all
+	return d.filterAllowed(all)
 }
 
 // DetectMultiline runs only multiline-capable rules against the full unsplit input.
@@ -78,7 +79,7 @@ func (d *Detector) DetectMultiline(input string) []Finding {
 			}
 		}
 	}
-	return all
+	return d.filterAllowed(all)
 }
 
 // extractLine returns the single line within s that contains byte position pos.
