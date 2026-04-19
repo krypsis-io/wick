@@ -5,15 +5,27 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/krypsis-io/wick/internal/detect"
+	"github.com/krypsis-io/wick/detect"
 	"gopkg.in/yaml.v3"
 )
 
 // Config represents the merged configuration from all sources.
 type Config struct {
-	Style          string                 `yaml:"style"`
-	CustomPatterns []detect.CustomPattern `yaml:"patterns"`
-	Format         string                 `yaml:"format"`
+	Style          string                  `yaml:"style"`
+	CustomPatterns []detect.CustomPattern  `yaml:"patterns"`
+	Format         string                  `yaml:"format"`
+	Allowlist      []detect.AllowlistEntry `yaml:"allowlist"`
+	Blocklist      []BlocklistEntry        `yaml:"blocklist"`
+	RulesFile      string                  `yaml:"rules_file"`
+	DisableRules   []string                `yaml:"disable_rules"`
+}
+
+// BlocklistEntry defines a pattern that is always redacted, even if not matched
+// by built-in rules. It is compiled as a custom detection pattern.
+type BlocklistEntry struct {
+	Pattern  string `yaml:"pattern"`
+	Category string `yaml:"category,omitempty"`
+	Reason   string `yaml:"reason,omitempty"`
 }
 
 // Load reads configuration from global (~/.config/wick/config.yaml) and
@@ -47,6 +59,12 @@ func Load() (*Config, error) {
 			cfg.Format = proj.Format
 		}
 		cfg.CustomPatterns = append(cfg.CustomPatterns, proj.CustomPatterns...)
+		cfg.Allowlist = append(cfg.Allowlist, proj.Allowlist...)
+		cfg.Blocklist = append(cfg.Blocklist, proj.Blocklist...)
+		if proj.RulesFile != "" {
+			cfg.RulesFile = proj.RulesFile
+		}
+		cfg.DisableRules = append(cfg.DisableRules, proj.DisableRules...)
 	}
 
 	return cfg, nil

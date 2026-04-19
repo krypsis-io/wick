@@ -9,21 +9,27 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/format"
 	"github.com/krypsis-io/wick/internal/config"
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/format"
 	"github.com/krypsis-io/wick/internal/output"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/redact"
+	wick "github.com/krypsis-io/wick"
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagFiles   []string
-	flagDir     string
-	flagOut     string
-	flagStyle   string
-	flagFormat  string
-	flagSummary bool
+	flagFiles     []string
+	flagDir       string
+	flagOut       string
+	flagStyle     string
+	flagFormat    string
+	flagSummary   bool
+	flagReport    bool
+	flagTokenize  bool
+	flagRehydrate bool
+	flagKey       string
+	flagTokenFile string
 )
 
 var rootCmd = &cobra.Command{
@@ -40,9 +46,14 @@ func init() {
 	rootCmd.Flags().StringSliceVar(&flagFiles, "file", nil, "input file(s) to redact")
 	rootCmd.Flags().StringVar(&flagDir, "dir", "", "directory of files to redact")
 	rootCmd.Flags().StringVar(&flagOut, "out", "", "output directory for --dir mode")
-	rootCmd.Flags().StringVar(&flagStyle, "style", "", "redaction style: redacted, stars, or custom=\"...\"")
+	rootCmd.Flags().StringVar(&flagStyle, "style", "", "redaction style: redacted, stars, hash, or custom=\"...\"")
 	rootCmd.Flags().StringVar(&flagFormat, "format", "", "output format: text, json")
 	rootCmd.Flags().BoolVar(&flagSummary, "summary", false, "print redaction summary to stderr")
+	rootCmd.Flags().BoolVar(&flagReport, "report", false, "print detailed per-finding report to stderr")
+	rootCmd.Flags().BoolVar(&flagTokenize, "tokenize", false, "redact with reversible tokens and write an encrypted token map")
+	rootCmd.Flags().BoolVar(&flagRehydrate, "rehydrate", false, "restore original values from a token map")
+	rootCmd.Flags().StringVar(&flagKey, "key", "", "base64-encoded AES-256 key for --tokenize / --rehydrate")
+	rootCmd.Flags().StringVar(&flagTokenFile, "token-file", ".wick-tokens.enc", "path to the encrypted token map file")
 }
 
 var errFindingsPresent = errors.New("findings present")
@@ -70,15 +81,27 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Rehydrate is a separate mode: read stdin, restore originals, done.
+	if flagRehydrate {
+		return runRehydrate()
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
 
-	style, err := resolveStyle(cfg)
+	// Tokenize mode: use reversible token replacer instead of normal style.
+	if flagTokenize {
+		return runTokenize(cfg)
+	}
+
+	baseReplacer, err := resolveReplacer(cfg)
 	if err != nil {
 		return err
 	}
+	// Apply per-pattern replacement overrides from custom patterns.
+	replacer := applyPerPatternReplacements(baseReplacer, cfg.CustomPatterns)
 
 	detector, err := newDetector(cfg)
 	if err != nil {
@@ -96,7 +119,7 @@ func run(_ *cobra.Command, _ []string) error {
 		out:   flagOut,
 	}
 
-	foundCount, err := executeRunMode(opts, detector, style, outputFormat)
+	foundCount, err := executeRunMode(opts, detector, replacer, outputFormat)
 	if err != nil {
 		return err
 	}
@@ -107,7 +130,116 @@ func run(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
+func runTokenize(cfg *config.Config) error {
+	if len(flagFiles) > 0 || flagDir != "" {
+		return fmt.Errorf("--tokenize only supports stdin input")
+	}
+
+	input, err := readStdin()
+	if err != nil {
+		return err
+	}
+
+	// Resolve or generate the key.
+	keyStr := flagKey
+	if keyStr == "" {
+		var genErr error
+		keyStr, genErr = wick.GenerateKey()
+		if genErr != nil {
+			return genErr
+		}
+		fmt.Fprintf(os.Stderr, "wick: key: %s\n", keyStr)
+	}
+
+	key, err := wick.DecodeKey(keyStr)
+	if err != nil {
+		return err
+	}
+
+	var opts []wick.Option
+	if len(cfg.CustomPatterns) > 0 {
+		opts = append(opts, wick.WithCustomPatterns(cfg.CustomPatterns))
+	}
+	if len(cfg.Allowlist) > 0 {
+		opts = append(opts, wick.WithAllowlist(cfg.Allowlist))
+	}
+	if len(cfg.Blocklist) > 0 {
+		var blockPatterns []detect.CustomPattern
+		for _, b := range cfg.Blocklist {
+			blockPatterns = append(blockPatterns, detect.CustomPattern{
+				Name:  b.Category,
+				Regex: b.Pattern,
+			})
+		}
+		opts = append(opts, wick.WithBlocklist(blockPatterns))
+	}
+
+	redacted, tm, err := wick.Dehydrate(input, key, opts...)
+	if err != nil {
+		return err
+	}
+
+	if err := wick.SaveTokenMap(tm, key, flagTokenFile); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "wick: token map written to %s\n", flagTokenFile)
+
+	fmt.Print(redacted)
+	return nil
+}
+
+func runRehydrate() error {
+	if flagKey == "" {
+		return fmt.Errorf("--rehydrate requires --key")
+	}
+
+	key, err := wick.DecodeKey(flagKey)
+	if err != nil {
+		return err
+	}
+
+	input, err := readStdin()
+	if err != nil {
+		return err
+	}
+
+	tm, err := wick.LoadTokenMap(key, flagTokenFile)
+	if err != nil {
+		return err
+	}
+
+	restored, err := wick.Rehydrate(input, tm)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(restored)
+	return nil
+}
+
+func readStdin() (string, error) {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return "", fmt.Errorf("stdin: %w", err)
+	}
+	if (stat.Mode() & os.ModeCharDevice) != 0 {
+		return "", fmt.Errorf("no input: pipe data to wick or use --file/--dir")
+	}
+	reader := io.LimitReader(os.Stdin, maxStdinBytes+1)
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("reading stdin: %w", err)
+	}
+	if len(data) > maxStdinBytes {
+		return "", fmt.Errorf("stdin exceeds maximum size of %d bytes", maxStdinBytes)
+	}
+	return string(data), nil
+}
+
 func validateRunFlags() error {
+	if flagTokenize && flagRehydrate {
+		return fmt.Errorf("--tokenize and --rehydrate are mutually exclusive")
+	}
 	if flagDir != "" && len(flagFiles) > 0 {
 		return fmt.Errorf("--dir and --file are mutually exclusive")
 	}
@@ -122,59 +254,72 @@ func newDetector(cfg *config.Config) (*detect.Detector, error) {
 	if err != nil {
 		return nil, fmt.Errorf("detector: %w", err)
 	}
-	if len(cfg.CustomPatterns) == 0 {
-		return detector, nil
+
+	if cfg.RulesFile != "" {
+		if err := detector.AddRulesFile(cfg.RulesFile); err != nil {
+			return nil, fmt.Errorf("rules_file: %w", err)
+		}
 	}
-	if err := detector.SetCustomPatterns(cfg.CustomPatterns); err != nil {
-		return nil, fmt.Errorf("config: %w", err)
+
+	if len(cfg.DisableRules) > 0 {
+		detector.DisableRules(cfg.DisableRules)
 	}
+
+	// Merge custom patterns and blocklist entries.
+	var allPatterns []detect.CustomPattern
+	allPatterns = append(allPatterns, cfg.CustomPatterns...)
+	for _, b := range cfg.Blocklist {
+		allPatterns = append(allPatterns, detect.CustomPattern{
+			Name:  b.Category,
+			Regex: b.Pattern,
+		})
+	}
+	if len(allPatterns) > 0 {
+		if err := detector.SetCustomPatterns(allPatterns); err != nil {
+			return nil, fmt.Errorf("config: %w", err)
+		}
+	}
+
+	if len(cfg.Allowlist) > 0 {
+		if err := detector.SetAllowlist(cfg.Allowlist); err != nil {
+			return nil, fmt.Errorf("config allowlist: %w", err)
+		}
+	}
+
 	return detector, nil
 }
 
-func executeRunMode(opts runOptions, detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
+func executeRunMode(opts runOptions, detector *detect.Detector, replacer redact.Replacer, outputFormat string) (int, error) {
 	switch {
 	case opts.dir != "":
-		return executeDirMode(detector, style, opts.dir, opts.out, outputFormat)
+		return executeDirMode(detector, replacer, opts.dir, opts.out, outputFormat)
 	case len(opts.files) > 0:
-		return processFiles(opts.files, detector, style, outputFormat)
+		return processFiles(opts.files, detector, replacer, outputFormat)
 	default:
-		return processStdin(detector, style, outputFormat)
+		return processStdin(detector, replacer, outputFormat)
 	}
 }
 
-func executeDirMode(detector *detect.Detector, style redact.Style, dir, out, outputFormat string) (int, error) {
+func executeDirMode(detector *detect.Detector, replacer redact.Replacer, dir, out, outputFormat string) (int, error) {
 	if out == "" {
 		return 0, fmt.Errorf("--out is required with --dir")
 	}
 	if outputFormat == "json" {
 		return 0, fmt.Errorf("--format json is not supported with --dir")
 	}
-	return processDir(dir, out, detector, style, outputFormat)
+	return processDir(dir, out, detector, replacer, outputFormat)
 }
 
-func processStdin(detector *detect.Detector, style redact.Style, outputFormat string) (int, error) {
-	stat, err := os.Stdin.Stat()
+func processStdin(detector *detect.Detector, replacer redact.Replacer, outputFormat string) (int, error) {
+	data, err := readStdin()
 	if err != nil {
-		return 0, fmt.Errorf("stdin: %w", err)
+		return 0, err
 	}
-	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return 0, fmt.Errorf("no input: pipe data to wick or use --file/--dir")
-	}
-
-	reader := io.LimitReader(os.Stdin, maxStdinBytes+1)
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return 0, fmt.Errorf("reading stdin: %w", err)
-	}
-	if len(data) > maxStdinBytes {
-		return 0, fmt.Errorf("stdin exceeds maximum size of %d bytes", maxStdinBytes)
-	}
-
-	return processInput(string(data), detector, style, outputFormat)
+	return processInput(data, detector, replacer, outputFormat)
 }
 
-func processInput(input string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
-	redacted, findings := format.Process(input, d, style)
+func processInput(input string, d *detect.Detector, replacer redact.Replacer, outputFmt string) (int, error) {
+	redacted, findings := format.Process(input, d, replacer)
 
 	if outputFmt == "json" {
 		jsonOut, err := output.JSON(redacted, findings)
@@ -185,17 +330,20 @@ func processInput(input string, d *detect.Detector, style redact.Style, outputFm
 	} else {
 		// format.Process already redacted the text; for TTY colorization
 		// we re-process from the original input.
-		fmt.Print(output.Terminal(input, redacted, findings, style))
+		fmt.Print(output.Terminal(input, redacted, findings, replacer))
 	}
 
 	if flagSummary {
 		output.Summary(os.Stderr, findings)
 	}
+	if flagReport {
+		output.Report(os.Stderr, findings)
+	}
 
 	return len(findings), nil
 }
 
-func processFiles(files []string, d *detect.Detector, style redact.Style, outputFmt string) (int, error) {
+func processFiles(files []string, d *detect.Detector, replacer redact.Replacer, outputFmt string) (int, error) {
 	total := 0
 	for _, f := range files {
 		info, err := os.Stat(f)
@@ -209,7 +357,7 @@ func processFiles(files []string, d *detect.Detector, style redact.Style, output
 		if err != nil {
 			return total, fmt.Errorf("reading %s: %w", f, err)
 		}
-		n, err := processInput(string(data), d, style, outputFmt)
+		n, err := processInput(string(data), d, replacer, outputFmt)
 		total += n
 		if err != nil {
 			return total, err
@@ -218,7 +366,7 @@ func processFiles(files []string, d *detect.Detector, style redact.Style, output
 	return total, nil
 }
 
-func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ string) (int, error) {
+func processDir(dir, outDir string, d *detect.Detector, replacer redact.Replacer, _ string) (int, error) {
 	dirAbs, err := filepath.Abs(dir)
 	if err != nil {
 		return 0, fmt.Errorf("resolving dir path: %w", err)
@@ -255,7 +403,7 @@ func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ st
 			return err
 		}
 
-		redacted, findings := format.Process(string(data), d, style)
+		redacted, findings := format.Process(string(data), d, replacer)
 		total += len(findings)
 
 		if err := os.WriteFile(outPath, []byte(redacted), info.Mode()); err != nil {
@@ -271,22 +419,33 @@ func processDir(dir, outDir string, d *detect.Detector, style redact.Style, _ st
 	return total, err
 }
 
-func resolveStyle(cfg *config.Config) (redact.Style, error) {
+func resolveReplacer(cfg *config.Config) (redact.Replacer, error) {
 	s := cfg.Style
 	if flagStyle != "" {
 		s = flagStyle
 	}
 	switch {
 	case s == "" || s == "redacted":
-		return redact.StyleRedacted, nil
+		return redact.Redacted, nil
 	case s == "stars":
-		return redact.StyleStars, nil
+		return redact.Stars, nil
+	case s == "hash":
+		return redact.Hash, nil
 	case strings.HasPrefix(s, "custom="):
-		redact.SetCustomReplacement(strings.TrimPrefix(s, "custom="))
-		return redact.CustomStyle(), nil
+		return redact.Custom(strings.TrimPrefix(s, "custom=")), nil
 	default:
-		return 0, fmt.Errorf("unknown style %q: use redacted, stars, or custom=\"...\"", s)
+		return nil, fmt.Errorf("unknown style %q: use redacted, stars, hash, or custom=\"...\"", s)
 	}
+}
+
+func applyPerPatternReplacements(base redact.Replacer, patterns []detect.CustomPattern) redact.Replacer {
+	overrides := make(map[string]string)
+	for _, p := range patterns {
+		if p.Replacement != "" {
+			overrides[p.Name] = p.Replacement
+		}
+	}
+	return redact.PerRule(base, overrides)
 }
 
 func resolveFormat(cfg *config.Config) (string, error) {

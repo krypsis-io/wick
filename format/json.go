@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 )
 
 // redactString detects and redacts secrets/PII in a string value line by line,
 // so that multi-line strings have correct byte offsets for redaction.
-func redactString(val string, d *detect.Detector, style redact.Style, findings *[]detect.Finding) (string, bool) {
+func redactString(val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
 	lines := strings.Split(val, "\n")
 	changed := false
 	for i, line := range lines {
@@ -20,7 +20,7 @@ func redactString(val string, d *detect.Detector, style redact.Style, findings *
 				found[j].Line = i + 1
 			}
 			*findings = append(*findings, found...)
-			lines[i] = redact.Redact(line, found, style)
+			lines[i] = redact.Redact(line, found, replacer)
 			changed = true
 		}
 	}
@@ -31,17 +31,17 @@ func redactString(val string, d *detect.Detector, style redact.Style, findings *
 }
 
 // ProcessJSON parses JSON, redacts string values, and preserves structure.
-func ProcessJSON(input string, detector *detect.Detector, style redact.Style) (string, []detect.Finding) {
+func ProcessJSON(input string, detector *detect.Detector, replacer redact.Replacer) (string, []detect.Finding) {
 	var data any
 	dec := json.NewDecoder(strings.NewReader(input))
 	dec.UseNumber()
 	if err := dec.Decode(&data); err != nil {
 		// Fall back to plaintext if JSON parsing fails.
-		return ProcessPlain(input, detector, style)
+		return ProcessPlain(input, detector, replacer)
 	}
 
 	var allFindings []detect.Finding
-	redacted := walkJSON(data, detector, style, &allFindings)
+	redacted := walkJSON(data, detector, replacer, &allFindings)
 
 	indent := indentOf(input)
 	var (
@@ -54,27 +54,27 @@ func ProcessJSON(input string, detector *detect.Detector, style redact.Style) (s
 		out, err = json.MarshalIndent(redacted, "", indent)
 	}
 	if err != nil {
-		return ProcessPlain(input, detector, style)
+		return ProcessPlain(input, detector, replacer)
 	}
 	return string(out), allFindings
 }
 
-func walkJSON(v any, d *detect.Detector, style redact.Style, findings *[]detect.Finding) any {
+func walkJSON(v any, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) any {
 	switch val := v.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(val))
 		for k, child := range val {
-			result[k] = walkJSON(child, d, style, findings)
+			result[k] = walkJSON(child, d, replacer, findings)
 		}
 		return result
 	case []any:
 		result := make([]any, len(val))
 		for i, child := range val {
-			result[i] = walkJSON(child, d, style, findings)
+			result[i] = walkJSON(child, d, replacer, findings)
 		}
 		return result
 	case string:
-		if result, changed := redactString(val, d, style, findings); changed {
+		if result, changed := redactString(val, d, replacer, findings); changed {
 			return result
 		}
 		return val

@@ -3,12 +3,12 @@ package format
 import (
 	"strings"
 
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 )
 
 // ProcessPlain detects and redacts secrets/PII line by line.
-func ProcessPlain(input string, detector *detect.Detector, style redact.Style) (string, []detect.Finding) {
+func ProcessPlain(input string, detector *detect.Detector, replacer redact.Replacer) (string, []detect.Finding) {
 	var allFindings []detect.Finding
 
 	// First pass: multiline rules against the full input (e.g. PEM private key blocks).
@@ -16,7 +16,7 @@ func ProcessPlain(input string, detector *detect.Detector, style redact.Style) (
 	multiFindings := detector.DetectMultiline(input)
 	working := input
 	if len(multiFindings) > 0 {
-		working = redact.Redact(input, multiFindings, style)
+		working = redact.Redact(input, multiFindings, replacer)
 		// Normalize multiline findings from absolute input offsets to per-line relative
 		// offsets so all entries in allFindings share the same coordinate semantics as
 		// the per-line findings appended below. End is clamped to the end of the
@@ -47,7 +47,7 @@ func ProcessPlain(input string, detector *detect.Detector, style redact.Style) (
 			findings[j].Line = i + 1
 		}
 		allFindings = append(allFindings, findings...)
-		result[i] = redact.Redact(line, findings, style)
+		result[i] = redact.Redact(line, findings, replacer)
 	}
 
 	return strings.Join(result, "\n"), allFindings

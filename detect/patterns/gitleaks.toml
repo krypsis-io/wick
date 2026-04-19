@@ -220,6 +220,22 @@ regexes = [
 ]
 
 [[rules]]
+id = "aws-secret-access-key"
+description = "Detected an AWS Secret Access Key, risking unauthorized access to AWS services and data breaches."
+regex = '''(?i)(?:aws_secret_access_key|aws_secret_key|secret_access_key)[\s'"]{0,3}(?:=|:|=>)[\s'"]{0,5}([A-Za-z0-9/+=]{40})(?:[\x60'"\s;]|\\[nr]|$)'''
+entropy = 4
+secretGroup = 1
+keywords = [
+    "aws_secret_access_key",
+    "aws_secret_key",
+    "secret_access_key",
+]
+[[rules.allowlists]]
+regexes = [
+    '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',
+]
+
+[[rules]]
 id = "aws-amazon-bedrock-api-key-long-lived"
 description = "Identified a pattern that may indicate long-lived Amazon Bedrock API keys, risking unauthorized Amazon Bedrock usage"
 regex = '''\b(ABSK[A-Za-z0-9+/]{109,269}={0,2})(?:[\x60'"\s;]|\\[nr]|$)'''

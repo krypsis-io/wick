@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 )
 
 var redactedStyle = lipgloss.NewStyle().
@@ -17,11 +17,11 @@ var redactedStyle = lipgloss.NewStyle().
 // Terminal returns the output string. When stdout is a TTY, redacted values
 // in the original text are highlighted with color. When piped, returns the
 // pre-redacted plain text.
-func Terminal(original, redacted string, findings []detect.Finding, style redact.Style) string {
+func Terminal(original, redacted string, findings []detect.Finding, replacer redact.Replacer) string {
 	if !isTTY() || len(findings) == 0 {
 		return redacted
 	}
-	return colorize(original, findings, style)
+	return colorize(original, findings, replacer)
 }
 
 func isTTY() bool {
@@ -34,27 +34,49 @@ func isTTY() bool {
 
 // colorize rebuilds the output from the original text, replacing finding
 // ranges with color-highlighted replacement strings.
-func colorize(input string, findings []detect.Finding, style redact.Style) string {
+func colorize(input string, findings []detect.Finding, replacer redact.Replacer) string {
 	lines := strings.Split(input, "\n")
-	replacement := style.Replacement()
-	colored := redactedStyle.Render(replacement)
 
 	for i, line := range lines {
 		lineFindings := findingsForLine(findings, i+1)
 		if len(lineFindings) == 0 {
 			continue
 		}
-		lines[i] = replaceLine(line, lineFindings, colored)
+		lines[i] = replaceLine(line, lineFindings, replacer)
 	}
 	return strings.Join(lines, "\n")
 }
 
-func replaceLine(line string, findings []detect.Finding, colored string) string {
-	spans := make([]span, len(findings))
-	for i, f := range findings {
-		spans[i] = span{f.Start, f.End}
+func replaceLine(line string, findings []detect.Finding, replacer redact.Replacer) string {
+	type coloredSpan struct {
+		start   int
+		end     int
+		colored string
 	}
-	merged := mergeSpans(spans)
+
+	spans := make([]coloredSpan, len(findings))
+	for i, f := range findings {
+		replacement := replacer.Replace(line[f.Start:f.End], f)
+		spans[i] = coloredSpan{f.Start, f.End, redactedStyle.Render(replacement)}
+	}
+
+	// Sort and merge overlapping spans.
+	for i := 1; i < len(spans); i++ {
+		for j := i; j > 0 && spans[j].start < spans[j-1].start; j-- {
+			spans[j], spans[j-1] = spans[j-1], spans[j]
+		}
+	}
+	merged := []coloredSpan{spans[0]}
+	for _, s := range spans[1:] {
+		last := &merged[len(merged)-1]
+		if s.start <= last.end {
+			if s.end > last.end {
+				last.end = s.end
+			}
+		} else {
+			merged = append(merged, s)
+		}
+	}
 
 	var result strings.Builder
 	prev := 0
@@ -67,36 +89,11 @@ func replaceLine(line string, findings []detect.Finding, colored string) string 
 			end = len(line)
 		}
 		result.WriteString(line[prev:s.start])
-		result.WriteString(colored)
+		result.WriteString(s.colored)
 		prev = end
 	}
 	result.WriteString(line[prev:])
 	return result.String()
-}
-
-type span struct{ start, end int }
-
-func mergeSpans(spans []span) []span {
-	if len(spans) == 0 {
-		return nil
-	}
-	for i := 1; i < len(spans); i++ {
-		for j := i; j > 0 && spans[j].start < spans[j-1].start; j-- {
-			spans[j], spans[j-1] = spans[j-1], spans[j]
-		}
-	}
-	merged := []span{spans[0]}
-	for _, s := range spans[1:] {
-		last := &merged[len(merged)-1]
-		if s.start <= last.end {
-			if s.end > last.end {
-				last.end = s.end
-			}
-		} else {
-			merged = append(merged, s)
-		}
-	}
-	return merged
 }
 
 func findingsForLine(findings []detect.Finding, lineNum int) []detect.Finding {
