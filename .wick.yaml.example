@@ -31,3 +31,11 @@
 #   - pattern: "\\w+\\.corp\\.acme\\.com"
 #     category: "custom"
 #     reason: "Internal hostnames"
+
+# Load additional Gitleaks-compatible rules from a TOML file.
+# rules_file: "./my-rules.toml"
+
+# Disable specific built-in rules by ID (use wick --report to see rule IDs).
+# disable_rules:
+#   - "generic-api-key"
+#   - "email"

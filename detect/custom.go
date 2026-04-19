@@ -9,7 +9,7 @@ import (
 type CustomPattern struct {
 	Name        string `yaml:"name"`
 	Regex       string `yaml:"regex"`
-	Replacement string `yaml:"replacement,omitempty"` // TODO: wire per-pattern replacements into redact.Redact
+	Replacement string `yaml:"replacement,omitempty"` // Applied via redact.PerRule when set
 }
 
 type compiledCustom struct {

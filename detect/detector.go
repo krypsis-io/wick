@@ -2,6 +2,8 @@
 package detect
 
 import (
+	"fmt"
+	"os"
 	"strings"
 )
 
@@ -10,6 +12,7 @@ type Detector struct {
 	secretRules    []SecretRule
 	customPatterns []compiledCustom
 	allowlist      []compiledAllowlistEntry
+	disabledPII    map[string]bool
 }
 
 // New creates a Detector with the embedded Gitleaks patterns and built-in PII rules.
@@ -19,6 +22,48 @@ func New() (*Detector, error) {
 		return nil, err
 	}
 	return &Detector{secretRules: rules}, nil
+}
+
+// AddRulesFile loads additional secret rules from a Gitleaks-compatible TOML
+// file and appends them to the detector's existing rules.
+func (d *Detector) AddRulesFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading rules file %q: %w", path, err)
+	}
+	extra, err := LoadSecretRulesFromBytes(data)
+	if err != nil {
+		return fmt.Errorf("parsing rules file %q: %w", path, err)
+	}
+	d.secretRules = append(d.secretRules, extra...)
+	return nil
+}
+
+// DisableRules removes rules with the given IDs from the detector.
+// Unknown IDs are silently ignored.
+func (d *Detector) DisableRules(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	disabled := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		disabled[id] = true
+	}
+	kept := d.secretRules[:0]
+	for _, r := range d.secretRules {
+		if !disabled[r.ID] {
+			kept = append(kept, r)
+		}
+	}
+	d.secretRules = kept
+
+	// Also track disabled PII rule IDs (email, ipv4, etc.).
+	for id := range disabled {
+		if d.disabledPII == nil {
+			d.disabledPII = make(map[string]bool)
+		}
+		d.disabledPII[id] = true
+	}
 }
 
 // SetCustomPatterns loads user-defined patterns into the detector.
@@ -39,7 +84,7 @@ func (d *Detector) Detect(input string) []Finding {
 	for i, line := range lines {
 		lineNum := i + 1
 		all = append(all, matchSecretRules(d.secretRules, line, lineNum)...)
-		all = append(all, matchPII(line, lineNum)...)
+		all = append(all, matchPII(line, lineNum, d.disabledPII)...)
 		all = append(all, matchCustom(d.customPatterns, line, lineNum)...)
 	}
 	return d.filterAllowed(all)

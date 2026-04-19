@@ -96,10 +96,12 @@ func run(_ *cobra.Command, _ []string) error {
 		return runTokenize(cfg)
 	}
 
-	replacer, err := resolveReplacer(cfg)
+	baseReplacer, err := resolveReplacer(cfg)
 	if err != nil {
 		return err
 	}
+	// Apply per-pattern replacement overrides from custom patterns.
+	replacer := applyPerPatternReplacements(baseReplacer, cfg.CustomPatterns)
 
 	detector, err := newDetector(cfg)
 	if err != nil {
@@ -251,6 +253,16 @@ func newDetector(cfg *config.Config) (*detect.Detector, error) {
 	detector, err := detect.New()
 	if err != nil {
 		return nil, fmt.Errorf("detector: %w", err)
+	}
+
+	if cfg.RulesFile != "" {
+		if err := detector.AddRulesFile(cfg.RulesFile); err != nil {
+			return nil, fmt.Errorf("rules_file: %w", err)
+		}
+	}
+
+	if len(cfg.DisableRules) > 0 {
+		detector.DisableRules(cfg.DisableRules)
 	}
 
 	// Merge custom patterns and blocklist entries.
@@ -424,6 +436,16 @@ func resolveReplacer(cfg *config.Config) (redact.Replacer, error) {
 	default:
 		return nil, fmt.Errorf("unknown style %q: use redacted, stars, hash, or custom=\"...\"", s)
 	}
+}
+
+func applyPerPatternReplacements(base redact.Replacer, patterns []detect.CustomPattern) redact.Replacer {
+	overrides := make(map[string]string)
+	for _, p := range patterns {
+		if p.Replacement != "" {
+			overrides[p.Name] = p.Replacement
+		}
+	}
+	return redact.PerRule(base, overrides)
 }
 
 func resolveFormat(cfg *config.Config) (string, error) {
