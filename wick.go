@@ -39,7 +39,8 @@ func Redact(input string, opts ...Option) (string, Report, error) {
 		return "", Report{}, err
 	}
 
-	redacted, findings := format.Process(input, detector, cfg.replacer)
+	replacer := buildReplacer(cfg.replacer, cfg.customPatterns)
+	redacted, findings := format.Process(input, detector, replacer)
 	return redacted, buildReport(findings), nil
 }
 
@@ -47,6 +48,16 @@ func buildDetector(cfg *config) (*detect.Detector, error) {
 	d, err := detect.New()
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.rulesFile != "" {
+		if err := d.AddRulesFile(cfg.rulesFile); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(cfg.disableRules) > 0 {
+		d.DisableRules(cfg.disableRules)
 	}
 
 	// Merge custom patterns and blocklist (blocklist is always-detect patterns).
@@ -64,6 +75,18 @@ func buildDetector(cfg *config) (*detect.Detector, error) {
 	}
 
 	return d, nil
+}
+
+// buildReplacer wraps the base replacer with per-pattern overrides if any
+// custom patterns have a Replacement field set.
+func buildReplacer(base redact.Replacer, patterns []detect.CustomPattern) redact.Replacer {
+	overrides := make(map[string]string)
+	for _, p := range patterns {
+		if p.Replacement != "" {
+			overrides[p.Name] = p.Replacement
+		}
+	}
+	return redact.PerRule(base, overrides)
 }
 
 func buildReport(findings []detect.Finding) Report {
@@ -103,7 +126,8 @@ func Dehydrate(input string, key []byte, opts ...Option) (string, TokenMap, erro
 	}
 
 	tr := redact.NewTokenizeReplacer()
-	redacted, _ := format.Process(input, detector, tr)
+	replacer := buildReplacer(tr, cfg.customPatterns)
+	redacted, _ := format.Process(input, detector, replacer)
 
 	entries := tr.Entries()
 	tm := TokenMap{entries: make(map[string]*TokenEntry, len(entries))}

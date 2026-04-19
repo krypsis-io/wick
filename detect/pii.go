@@ -58,9 +58,13 @@ var piiPatterns = []piiPattern{
 }
 
 // matchPII runs all PII patterns against a single line and returns findings.
-func matchPII(line string, lineNum int) []Finding {
+// disabled is an optional set of rule IDs to skip (may be nil).
+func matchPII(line string, lineNum int, disabled map[string]bool) []Finding {
 	var findings []Finding
 	for _, p := range piiPatterns {
+		if disabled[p.ID] {
+			continue
+		}
 		matches := p.Regex.FindAllStringIndex(line, -1)
 		for _, m := range matches {
 			value := line[m[0]:m[1]]

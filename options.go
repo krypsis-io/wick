@@ -11,6 +11,8 @@ type config struct {
 	customPatterns []detect.CustomPattern
 	allowlist      []detect.AllowlistEntry
 	blocklist      []detect.CustomPattern
+	rulesFile      string
+	disableRules   []string
 }
 
 // Option configures a Redact call.
@@ -50,5 +52,21 @@ func WithAllowlist(entries []detect.AllowlistEntry) Option {
 func WithBlocklist(entries []detect.CustomPattern) Option {
 	return optionFunc(func(c *config) {
 		c.blocklist = append(c.blocklist, entries...)
+	})
+}
+
+// WithRulesFile loads additional secret detection rules from a
+// Gitleaks-compatible TOML file, appending them to the built-in rules.
+func WithRulesFile(path string) Option {
+	return optionFunc(func(c *config) {
+		c.rulesFile = path
+	})
+}
+
+// WithDisabledRules removes the named rules from the detector.
+// Use this to suppress built-in rules that produce false positives.
+func WithDisabledRules(ids []string) Option {
+	return optionFunc(func(c *config) {
+		c.disableRules = append(c.disableRules, ids...)
 	})
 }

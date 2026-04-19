@@ -11,11 +11,13 @@ import (
 
 // Config represents the merged configuration from all sources.
 type Config struct {
-	Style          string                 `yaml:"style"`
-	CustomPatterns []detect.CustomPattern `yaml:"patterns"`
-	Format         string                 `yaml:"format"`
+	Style          string                  `yaml:"style"`
+	CustomPatterns []detect.CustomPattern  `yaml:"patterns"`
+	Format         string                  `yaml:"format"`
 	Allowlist      []detect.AllowlistEntry `yaml:"allowlist"`
 	Blocklist      []BlocklistEntry        `yaml:"blocklist"`
+	RulesFile      string                  `yaml:"rules_file"`
+	DisableRules   []string                `yaml:"disable_rules"`
 }
 
 // BlocklistEntry defines a pattern that is always redacted, even if not matched
@@ -59,6 +61,10 @@ func Load() (*Config, error) {
 		cfg.CustomPatterns = append(cfg.CustomPatterns, proj.CustomPatterns...)
 		cfg.Allowlist = append(cfg.Allowlist, proj.Allowlist...)
 		cfg.Blocklist = append(cfg.Blocklist, proj.Blocklist...)
+		if proj.RulesFile != "" {
+			cfg.RulesFile = proj.RulesFile
+		}
+		cfg.DisableRules = append(cfg.DisableRules, proj.DisableRules...)
 	}
 
 	return cfg, nil
