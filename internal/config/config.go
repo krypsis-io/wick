@@ -14,6 +14,16 @@ type Config struct {
 	Style          string                 `yaml:"style"`
 	CustomPatterns []detect.CustomPattern `yaml:"patterns"`
 	Format         string                 `yaml:"format"`
+	Allowlist      []detect.AllowlistEntry `yaml:"allowlist"`
+	Blocklist      []BlocklistEntry        `yaml:"blocklist"`
+}
+
+// BlocklistEntry defines a pattern that is always redacted, even if not matched
+// by built-in rules. It is compiled as a custom detection pattern.
+type BlocklistEntry struct {
+	Pattern  string `yaml:"pattern"`
+	Category string `yaml:"category,omitempty"`
+	Reason   string `yaml:"reason,omitempty"`
 }
 
 // Load reads configuration from global (~/.config/wick/config.yaml) and
@@ -47,6 +57,8 @@ func Load() (*Config, error) {
 			cfg.Format = proj.Format
 		}
 		cfg.CustomPatterns = append(cfg.CustomPatterns, proj.CustomPatterns...)
+		cfg.Allowlist = append(cfg.Allowlist, proj.Allowlist...)
+		cfg.Blocklist = append(cfg.Blocklist, proj.Blocklist...)
 	}
 
 	return cfg, nil

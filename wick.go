@@ -48,11 +48,21 @@ func buildDetector(cfg *config) (*detect.Detector, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(cfg.customPatterns) > 0 {
-		if err := d.SetCustomPatterns(cfg.customPatterns); err != nil {
+
+	// Merge custom patterns and blocklist (blocklist is always-detect patterns).
+	all := append(cfg.customPatterns, cfg.blocklist...)
+	if len(all) > 0 {
+		if err := d.SetCustomPatterns(all); err != nil {
 			return nil, err
 		}
 	}
+
+	if len(cfg.allowlist) > 0 {
+		if err := d.SetAllowlist(cfg.allowlist); err != nil {
+			return nil, err
+		}
+	}
+
 	return d, nil
 }
 

@@ -1,7 +1,7 @@
 # Wick project configuration
 # Place this file as .wick.yaml in your project root.
 
-# Redaction style: "redacted" (default), "stars", or a custom string.
+# Redaction style: "redacted" (default), "stars", "hash", or a custom string.
 # style: redacted
 
 # Custom detection patterns (in addition to built-in secrets and PII).
@@ -11,3 +11,23 @@
 #   - name: internal-hostname
 #     regex: "\\w+\\.internal\\.acme\\.com"
 #     replacement: "[INTERNAL-HOST]"
+
+# Allowlist: known-safe values that should never be redacted.
+# Use exact strings or set regex: true for regular expressions.
+# allowlist:
+#   - pattern: "AKIAIOSFODNN7EXAMPLE"
+#     reason: "AWS documentation example key"
+#   - pattern: "test@example\\.com"
+#     regex: true
+#     reason: "Test fixture email"
+#   - pattern: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+#     reason: "AWS documentation example secret"
+
+# Blocklist: patterns that are always redacted, even if not in built-in rules.
+# blocklist:
+#   - pattern: "ACME-INTERNAL-[A-Z0-9]+"
+#     category: "custom"
+#     reason: "Internal project codes"
+#   - pattern: "\\w+\\.corp\\.acme\\.com"
+#     category: "custom"
+#     reason: "Internal hostnames"

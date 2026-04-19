@@ -156,6 +156,19 @@ func runTokenize(cfg *config.Config) error {
 	if len(cfg.CustomPatterns) > 0 {
 		opts = append(opts, wick.WithCustomPatterns(cfg.CustomPatterns))
 	}
+	if len(cfg.Allowlist) > 0 {
+		opts = append(opts, wick.WithAllowlist(cfg.Allowlist))
+	}
+	if len(cfg.Blocklist) > 0 {
+		var blockPatterns []detect.CustomPattern
+		for _, b := range cfg.Blocklist {
+			blockPatterns = append(blockPatterns, detect.CustomPattern{
+				Name:  b.Category,
+				Regex: b.Pattern,
+			})
+		}
+		opts = append(opts, wick.WithBlocklist(blockPatterns))
+	}
 
 	redacted, tm, err := wick.Dehydrate(input, key, opts...)
 	if err != nil {
@@ -237,12 +250,28 @@ func newDetector(cfg *config.Config) (*detect.Detector, error) {
 	if err != nil {
 		return nil, fmt.Errorf("detector: %w", err)
 	}
-	if len(cfg.CustomPatterns) == 0 {
-		return detector, nil
+
+	// Merge custom patterns and blocklist entries.
+	var allPatterns []detect.CustomPattern
+	allPatterns = append(allPatterns, cfg.CustomPatterns...)
+	for _, b := range cfg.Blocklist {
+		allPatterns = append(allPatterns, detect.CustomPattern{
+			Name:  b.Category,
+			Regex: b.Pattern,
+		})
 	}
-	if err := detector.SetCustomPatterns(cfg.CustomPatterns); err != nil {
-		return nil, fmt.Errorf("config: %w", err)
+	if len(allPatterns) > 0 {
+		if err := detector.SetCustomPatterns(allPatterns); err != nil {
+			return nil, fmt.Errorf("config: %w", err)
+		}
 	}
+
+	if len(cfg.Allowlist) > 0 {
+		if err := detector.SetAllowlist(cfg.Allowlist); err != nil {
+			return nil, fmt.Errorf("config allowlist: %w", err)
+		}
+	}
+
 	return detector, nil
 }
 
