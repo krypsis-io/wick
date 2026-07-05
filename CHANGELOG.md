@@ -1,3 +1,5 @@
+## [0.1.12](https://github.com/krypsis-io/wick/compare/v0.1.11...v0.1.12) (2026-07-05)
+
 ## [0.1.11](https://github.com/krypsis-io/wick/compare/v0.1.10...v0.1.11) (2026-07-03)
 
 ## [0.1.10](https://github.com/krypsis-io/wick/compare/v0.1.9...v0.1.10) (2026-06-24)
