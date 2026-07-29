@@ -32,24 +32,34 @@ func TestDetector_AWSSecretAccessKey(t *testing.T) {
 	}
 
 	tests := []struct {
-		name  string
-		input string
-		want  bool
+		name      string
+		input     string
+		want      bool
+		wantValue string // expected captured secret, asserted only when want is true
 	}{
 		{
-			name:  "env var assignment",
-			input: `AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYzzzzzzzzAB`,
-			want:  true,
+			name:      "env var assignment",
+			input:     `AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYzzzzzzzzAB`,
+			want:      true,
+			wantValue: `wJalrXUtnFEMI/K7MDENG/bPxRfiCYzzzzzzzzAB`,
 		},
 		{
-			name:  "quoted assignment",
-			input: `aws_secret_access_key = "Ab1CD2efGH3ijKL4mnOP5qrST6uvWX7yzAB8CDE9"`,
-			want:  true,
+			name:      "quoted assignment",
+			input:     `aws_secret_access_key = "Ab1CD2efGH3ijKL4mnOP5qrST6uvWX7yzAB8CDE9"`,
+			want:      true,
+			wantValue: `Ab1CD2efGH3ijKL4mnOP5qrST6uvWX7yzAB8CDE9`,
 		},
 		{
-			name:  "yaml style",
-			input: `secret_access_key: Ab1CD2efGH3ijKL4mnOP5qrST6uvWX7yzAB8CDE9`,
-			want:  true,
+			name:      "yaml style",
+			input:     `secret_access_key: Ab1CD2efGH3ijKL4mnOP5qrST6uvWX7yzAB8CDE9`,
+			want:      true,
+			wantValue: `Ab1CD2efGH3ijKL4mnOP5qrST6uvWX7yzAB8CDE9`,
+		},
+		{
+			name:      "ruby fat-arrow hash",
+			input:     `secret_access_key => "Ab1CD2efGH3ijKL4mnOP5qrST6uvWX7yzAB8CDE9"`,
+			want:      true,
+			wantValue: `Ab1CD2efGH3ijKL4mnOP5qrST6uvWX7yzAB8CDE9`,
 		},
 		{
 			name:  "example key should be allowlisted",
@@ -70,6 +80,9 @@ func TestDetector_AWSSecretAccessKey(t *testing.T) {
 			for _, f := range findings {
 				if f.RuleID == "aws-secret-access-key" {
 					found = true
+					if tt.want && f.Value != tt.wantValue {
+						t.Errorf("got value %q, want %q", f.Value, tt.wantValue)
+					}
 					break
 				}
 			}

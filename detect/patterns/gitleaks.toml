@@ -232,7 +232,7 @@ keywords = [
 ]
 [[rules.allowlists]]
 regexes = [
-    '''wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY''',
+    '''^wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY$''',
 ]
 
 [[rules]]

@@ -37,7 +37,10 @@ func Redact(line string, findings []detect.Finding, replacer Replacer) string {
 	merged := []replacementSpan{spans[0]}
 	for _, s := range spans[1:] {
 		last := &merged[len(merged)-1]
-		if s.start <= last.end {
+		// Merge only on true overlap. Ranges are half-open [start, end), so an
+		// adjacent span (s.start == last.end) does not overlap and must stay
+		// separate, otherwise its replacement would be dropped.
+		if s.start < last.end {
 			if s.end > last.end {
 				last.end = s.end
 			}
