@@ -56,4 +56,3 @@ func Redact(line string, findings []detect.Finding, replacer Replacer) string {
 	result = append(result, line[prev:]...)
 	return string(result)
 }
-

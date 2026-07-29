@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	wick "github.com/krypsis-io/wick"
 	"github.com/krypsis-io/wick/detect"
 	"github.com/krypsis-io/wick/format"
 	"github.com/krypsis-io/wick/internal/config"
 	"github.com/krypsis-io/wick/internal/output"
 	"github.com/krypsis-io/wick/redact"
-	wick "github.com/krypsis-io/wick"
 	"github.com/spf13/cobra"
 )
 
@@ -174,7 +174,7 @@ func runTokenize(cfg *config.Config) error {
 		opts = append(opts, wick.WithBlocklist(blockPatterns))
 	}
 
-	redacted, tm, err := wick.Dehydrate(input, key, opts...)
+	redacted, tm, err := wick.Dehydrate(input, opts...)
 	if err != nil {
 		return err
 	}

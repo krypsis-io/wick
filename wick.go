@@ -61,7 +61,10 @@ func buildDetector(cfg *config) (*detect.Detector, error) {
 	}
 
 	// Merge custom patterns and blocklist (blocklist is always-detect patterns).
-	all := append(cfg.customPatterns, cfg.blocklist...)
+	// Allocate a fresh slice so we never alias cfg.customPatterns' backing array.
+	all := make([]detect.CustomPattern, 0, len(cfg.customPatterns)+len(cfg.blocklist))
+	all = append(all, cfg.customPatterns...)
+	all = append(all, cfg.blocklist...)
 	if len(all) > 0 {
 		if err := d.SetCustomPatterns(all); err != nil {
 			return nil, err
@@ -111,10 +114,11 @@ func buildReport(findings []detect.Finding) Report {
 
 // Dehydrate redacts input using reversible token replacement and returns the
 // redacted text along with a TokenMap that can be used to restore the original.
-// The token map is encrypted with the provided AES-256 key (see GenerateKey).
+// The returned TokenMap holds the plaintext originals in memory; use
+// SaveTokenMap to persist it encrypted with an AES-256 key (see GenerateKey).
 // Each unique value gets a stable token of the form [RULEID-N], so the same
 // value always maps to the same token within a single Dehydrate call.
-func Dehydrate(input string, key []byte, opts ...Option) (string, TokenMap, error) {
+func Dehydrate(input string, opts ...Option) (string, TokenMap, error) {
 	cfg := defaultConfig()
 	for _, o := range opts {
 		o.apply(cfg)

@@ -31,7 +31,7 @@ func TestDisableRules(t *testing.T) {
 	}
 }
 
-func TestDisableRules_UnknownID(t *testing.T) {
+func TestDisableRules_UnknownID(_ *testing.T) {
 	d, _ := New()
 	// Should not panic on unknown rule IDs.
 	d.DisableRules([]string{"nonexistent-rule-id"})

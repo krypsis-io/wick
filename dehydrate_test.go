@@ -44,10 +44,8 @@ func TestDecodeKey_Invalid(t *testing.T) {
 
 func TestDehydrate_Basic(t *testing.T) {
 	input := "Contact admin@acme.com from 10.0.1.42"
-	key, _ := GenerateKey()
-	keyBytes, _ := DecodeKey(key)
 
-	redacted, tm, err := Dehydrate(input, keyBytes)
+	redacted, tm, err := Dehydrate(input)
 	if err != nil {
 		t.Fatalf("Dehydrate: %v", err)
 	}
@@ -65,10 +63,8 @@ func TestDehydrate_Basic(t *testing.T) {
 
 func TestRoundTrip(t *testing.T) {
 	input := "Contact admin@acme.com from 10.0.1.42 — key: AKIAZ5GMHYJKLMNOPQRS"
-	key, _ := GenerateKey()
-	keyBytes, _ := DecodeKey(key)
 
-	redacted, tm, err := Dehydrate(input, keyBytes)
+	redacted, tm, err := Dehydrate(input)
 	if err != nil {
 		t.Fatalf("Dehydrate: %v", err)
 	}
@@ -85,10 +81,8 @@ func TestRoundTrip(t *testing.T) {
 
 func TestRoundTrip_RepeatedValue(t *testing.T) {
 	input := "admin@acme.com is the admin. Contact admin@acme.com."
-	key, _ := GenerateKey()
-	keyBytes, _ := DecodeKey(key)
 
-	redacted, tm, err := Dehydrate(input, keyBytes)
+	redacted, tm, err := Dehydrate(input)
 	if err != nil {
 		t.Fatalf("Dehydrate: %v", err)
 	}
@@ -108,7 +102,7 @@ func TestSaveAndLoadTokenMap(t *testing.T) {
 	key, _ := GenerateKey()
 	keyBytes, _ := DecodeKey(key)
 
-	_, tm, err := Dehydrate(input, keyBytes)
+	_, tm, err := Dehydrate(input)
 	if err != nil {
 		t.Fatalf("Dehydrate: %v", err)
 	}
@@ -133,7 +127,7 @@ func TestLoadTokenMap_WrongKey(t *testing.T) {
 	key, _ := GenerateKey()
 	keyBytes, _ := DecodeKey(key)
 
-	_, tm, _ := Dehydrate(input, keyBytes)
+	_, tm, _ := Dehydrate(input)
 	tmpFile := filepath.Join(t.TempDir(), "tokens.enc")
 	_ = SaveTokenMap(tm, keyBytes, tmpFile)
 
@@ -156,7 +150,7 @@ func TestSaveTokenMap_FilePermissions(t *testing.T) {
 	input := "admin@acme.com"
 	key, _ := GenerateKey()
 	keyBytes, _ := DecodeKey(key)
-	_, tm, _ := Dehydrate(input, keyBytes)
+	_, tm, _ := Dehydrate(input)
 
 	tmpFile := filepath.Join(t.TempDir(), "tokens.enc")
 	if err := SaveTokenMap(tm, keyBytes, tmpFile); err != nil {
@@ -174,10 +168,8 @@ func TestSaveTokenMap_FilePermissions(t *testing.T) {
 
 func TestRehydrate_NoFindings(t *testing.T) {
 	input := "nothing sensitive here"
-	key, _ := GenerateKey()
-	keyBytes, _ := DecodeKey(key)
 
-	redacted, tm, err := Dehydrate(input, keyBytes)
+	redacted, tm, err := Dehydrate(input)
 	if err != nil {
 		t.Fatalf("Dehydrate: %v", err)
 	}
