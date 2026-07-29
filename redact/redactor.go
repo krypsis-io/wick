@@ -18,6 +18,7 @@ func Redact(line string, findings []detect.Finding, replacer Replacer) string {
 	type replacementSpan struct {
 		start       int
 		end         int
+		ruleID      string
 		replacement string
 	}
 
@@ -26,19 +27,24 @@ func Redact(line string, findings []detect.Finding, replacer Replacer) string {
 		spans[i] = replacementSpan{
 			start:       f.Start,
 			end:         f.End,
+			ruleID:      f.RuleID,
 			replacement: replacer.Replace(line[f.Start:f.End], f),
 		}
 	}
 
 	// Sort and merge overlapping spans. For merged spans, use the first
-	// replacement. Break start-position ties by longer span first so that, when
-	// two findings begin at the same offset, precedence (and thus the retained
-	// replacement) is deterministic rather than dependent on detection order.
+	// replacement. Break start-position ties by longer span first, then by
+	// RuleID, so that when two findings share an offset (or are fully identical)
+	// precedence — and thus the retained replacement — is deterministic rather
+	// than dependent on detection order.
 	sort.Slice(spans, func(i, j int) bool {
 		if spans[i].start != spans[j].start {
 			return spans[i].start < spans[j].start
 		}
-		return spans[i].end > spans[j].end
+		if spans[i].end != spans[j].end {
+			return spans[i].end > spans[j].end
+		}
+		return spans[i].ruleID < spans[j].ruleID
 	})
 	merged := []replacementSpan{spans[0]}
 	for _, s := range spans[1:] {

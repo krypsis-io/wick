@@ -72,6 +72,9 @@ func TestProcessJSON_KeyedSecret(t *testing.T) {
 	if strings.Contains(output, "wJalrXUtnFEMI") {
 		t.Errorf("secret should be redacted: %s", output)
 	}
+	if !strings.Contains(output, "[REDACTED]") {
+		t.Errorf("expected value replaced with [REDACTED]: %s", output)
+	}
 	if !strings.Contains(output, `"aws_secret_access_key"`) {
 		t.Errorf("expected key preserved: %s", output)
 	}
@@ -87,6 +90,12 @@ func TestProcessYAML_KeyedSecret(t *testing.T) {
 	}
 	if strings.Contains(output, "wJalrXUtnFEMI") {
 		t.Errorf("secret should be redacted: %s", output)
+	}
+	if !strings.Contains(output, "aws_secret_access_key:") {
+		t.Errorf("expected key preserved: %s", output)
+	}
+	if !strings.Contains(output, "[REDACTED]") {
+		t.Errorf("expected value replaced with [REDACTED]: %s", output)
 	}
 	if !strings.Contains(output, "name: prod") {
 		t.Errorf("expected other keys preserved: %s", output)

@@ -81,6 +81,22 @@ func TestRedact_EqualStartDeterministic(t *testing.T) {
 	}
 }
 
+func TestRedact_IdenticalSpansDeterministic(t *testing.T) {
+	line := "ABCDEFGHIJ"
+	// Two findings cover the exact same range but come from different rules; the
+	// retained replacement must be deterministic regardless of input order.
+	a := detect.Finding{Start: 2, End: 6, RuleID: "aaa"}
+	b := detect.Finding{Start: 2, End: 6, RuleID: "bbb"}
+	// Tie-break is by RuleID ascending, so "aaa" wins.
+	want := "AB<aaa>GHIJ"
+	if got := Redact(line, []detect.Finding{a, b}, ruleReplacer{}); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got := Redact(line, []detect.Finding{b, a}, ruleReplacer{}); got != want {
+		t.Errorf("order-dependent result: got %q, want %q", got, want)
+	}
+}
+
 func TestRedact_NoFindings(t *testing.T) {
 	line := "nothing here"
 	got := Redact(line, nil, Redacted)
