@@ -82,6 +82,16 @@ func parseGitleaksTOML(data []byte) ([]SecretRule, error) {
 		return nil, err
 	}
 
+	// The top-level [allowlist] applies globally to every rule; compile it once
+	// and append it to each rule's effective allowlist. Only its regexes and
+	// stopwords affect content scanning (paths apply to file-based scanning,
+	// which this package does not do).
+	var globalAllow *compiledAllow
+	if cfg.Allowlist != nil {
+		ga := compileAllow(*cfg.Allowlist)
+		globalAllow = &ga
+	}
+
 	rules := make([]SecretRule, 0, len(cfg.Rules))
 	for _, raw := range cfg.Rules {
 		if raw.Regex == "" {
@@ -101,17 +111,10 @@ func parseGitleaksTOML(data []byte) ([]SecretRule, error) {
 
 		var allows []compiledAllow
 		for _, a := range raw.Allowlists {
-			ca := compiledAllow{
-				StopWords:   a.StopWords,
-				RegexTarget: a.RegexTarget,
-				Condition:   a.Condition,
-			}
-			for _, r := range a.Regexes {
-				if compiled, err := regexp.Compile(r); err == nil {
-					ca.Regexes = append(ca.Regexes, compiled)
-				}
-			}
-			allows = append(allows, ca)
+			allows = append(allows, compileAllow(a))
+		}
+		if globalAllow != nil {
+			allows = append(allows, *globalAllow)
 		}
 
 		rules = append(rules, SecretRule{
@@ -126,6 +129,23 @@ func parseGitleaksTOML(data []byte) ([]SecretRule, error) {
 		})
 	}
 	return rules, nil
+}
+
+// compileAllow compiles a raw gitleaks allowlist into its matchable form.
+// Regexes that fail to compile are skipped so one bad entry does not discard
+// the rest of the allowlist.
+func compileAllow(a gitleaksAllow) compiledAllow {
+	ca := compiledAllow{
+		StopWords:   a.StopWords,
+		RegexTarget: a.RegexTarget,
+		Condition:   a.Condition,
+	}
+	for _, r := range a.Regexes {
+		if compiled, err := regexp.Compile(r); err == nil {
+			ca.Regexes = append(ca.Regexes, compiled)
+		}
+	}
+	return ca
 }
 
 // shannonEntropy calculates the Shannon entropy of a string.

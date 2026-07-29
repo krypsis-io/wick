@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/krypsis-io/wick/internal/detect"
-	"github.com/krypsis-io/wick/internal/redact"
+	"github.com/krypsis-io/wick/detect"
+	"github.com/krypsis-io/wick/redact"
 )
 
 func newDetector(t *testing.T) *detect.Detector {
@@ -42,7 +42,7 @@ func TestDetectFormat(t *testing.T) {
 func TestProcessJSON(t *testing.T) {
 	d := newDetector(t)
 	input := `{"api_key": "AKIAZ5GMHYJKLMNOPQRS", "name": "test"}`
-	output, findings := ProcessJSON(input, d, redact.StyleRedacted)
+	output, findings := ProcessJSON(input, d, redact.Redacted)
 
 	if len(findings) == 0 {
 		t.Fatal("expected findings")
@@ -58,10 +58,54 @@ func TestProcessJSON(t *testing.T) {
 	}
 }
 
+func TestProcessJSON_KeyedSecret(t *testing.T) {
+	// The aws-secret-access-key rule is keyword-anchored: the key name must be
+	// adjacent to the value. In JSON the name is the mapping key, so detection
+	// must use the key as context.
+	d := newDetector(t)
+	input := `{"aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYzzzzzzzzAB"}`
+	output, findings := ProcessJSON(input, d, redact.Redacted)
+
+	if len(findings) == 0 {
+		t.Fatal("expected the keyed AWS secret to be detected")
+	}
+	if strings.Contains(output, "wJalrXUtnFEMI") {
+		t.Errorf("secret should be redacted: %s", output)
+	}
+	if !strings.Contains(output, "[REDACTED]") {
+		t.Errorf("expected value replaced with [REDACTED]: %s", output)
+	}
+	if !strings.Contains(output, `"aws_secret_access_key"`) {
+		t.Errorf("expected key preserved: %s", output)
+	}
+}
+
+func TestProcessYAML_KeyedSecret(t *testing.T) {
+	d := newDetector(t)
+	input := "config:\n  aws_secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYzzzzzzzzAB\n  name: prod\n"
+	output, findings := ProcessYAML(input, d, redact.Redacted)
+
+	if len(findings) == 0 {
+		t.Fatal("expected the keyed AWS secret to be detected")
+	}
+	if strings.Contains(output, "wJalrXUtnFEMI") {
+		t.Errorf("secret should be redacted: %s", output)
+	}
+	if !strings.Contains(output, "aws_secret_access_key:") {
+		t.Errorf("expected key preserved: %s", output)
+	}
+	if !strings.Contains(output, "[REDACTED]") {
+		t.Errorf("expected value replaced with [REDACTED]: %s", output)
+	}
+	if !strings.Contains(output, "name: prod") {
+		t.Errorf("expected other keys preserved: %s", output)
+	}
+}
+
 func TestProcessEnv(t *testing.T) {
 	d := newDetector(t)
 	input := "# Config\nAPI_KEY=AKIAZ5GMHYJKLMNOPQRS\nDB_NAME=mydb"
-	output, findings := ProcessEnv(input, d, redact.StyleRedacted)
+	output, findings := ProcessEnv(input, d, redact.Redacted)
 
 	if len(findings) == 0 {
 		t.Fatal("expected findings")
@@ -80,7 +124,7 @@ func TestProcessEnv(t *testing.T) {
 func TestProcessPlain(t *testing.T) {
 	d := newDetector(t)
 	input := "Contact admin@acme.com from 10.0.1.42"
-	output, findings := ProcessPlain(input, d, redact.StyleRedacted)
+	output, findings := ProcessPlain(input, d, redact.Redacted)
 
 	if len(findings) < 2 {
 		t.Fatalf("expected at least 2 findings, got %d", len(findings))

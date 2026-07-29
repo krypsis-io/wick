@@ -1,7 +1,9 @@
 # Intentional fake secrets for the VHS demo recording
 assets/demo.tape
 
-# Test files containing intentional fake secrets for detection validation
-internal/detect/detector_test.go
-internal/format/format_test.go
-internal/redact/redactor_test.go
+# Test files contain intentional fake secrets for detection validation.
+# Wick is a secret-detection tool, so its tests necessarily embed sample
+# credentials. Ignore all Go test files rather than enumerate individual
+# paths — enumerated internal/ paths silently went stale in the v0.2 refactor
+# when the packages were promoted out of internal/.
+*_test.go
