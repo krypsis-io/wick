@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/krypsis-io/wick/detect"
 )
 
 func TestGenerateKey(t *testing.T) {
@@ -94,6 +96,35 @@ func TestRoundTrip_RepeatedValue(t *testing.T) {
 
 	if restored != input {
 		t.Errorf("round-trip with repeated value failed:\n  input:    %q\n  restored: %q", input, restored)
+	}
+}
+
+func TestRoundTrip_CustomPatternWithReplacement(t *testing.T) {
+	// A custom pattern that defines a static replacement override must still
+	// round-trip under Dehydrate: tokenization takes precedence over the
+	// override so the value stays reversible rather than being lost.
+	patterns := []detect.CustomPattern{
+		{Name: "internal-code", Regex: `ACME-\d{4}`, Replacement: "[CODE]"},
+	}
+	input := "Ticket ACME-1234 is open"
+
+	redacted, tm, err := Dehydrate(input, WithCustomPatterns(patterns))
+	if err != nil {
+		t.Fatalf("Dehydrate: %v", err)
+	}
+	if strings.Contains(redacted, "ACME-1234") {
+		t.Errorf("custom value should be redacted: %s", redacted)
+	}
+	if strings.Contains(redacted, "[CODE]") {
+		t.Errorf("static override must not be used in tokenize mode: %s", redacted)
+	}
+
+	restored, err := Rehydrate(redacted, tm)
+	if err != nil {
+		t.Fatalf("Rehydrate: %v", err)
+	}
+	if restored != input {
+		t.Errorf("round-trip failed:\n  input:    %q\n  restored: %q", input, restored)
 	}
 }
 

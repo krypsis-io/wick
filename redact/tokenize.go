@@ -68,7 +68,10 @@ func (t *TokenizeReplacer) Entries() map[string]*TokenEntry {
 
 	out := make(map[string]*TokenEntry, len(t.byValue))
 	for _, e := range t.byValue {
-		out[e.Replacement] = e
+		// Deep-copy so callers cannot mutate or race with internal entries
+		// after the mutex is released.
+		cp := *e
+		out[cp.Replacement] = &cp
 	}
 	return out
 }

@@ -50,6 +50,9 @@ func DecodeKey(encoded string) ([]byte, error) {
 
 // SaveTokenMap encrypts the token map with AES-256-GCM and writes it to path.
 func SaveTokenMap(tm TokenMap, key []byte, path string) error {
+	if len(key) != 32 {
+		return fmt.Errorf("key must be 256 bits (32 bytes), got %d", len(key))
+	}
 	data, err := json.Marshal(tm.entries)
 	if err != nil {
 		return fmt.Errorf("marshaling token map: %w", err)
@@ -78,6 +81,9 @@ func SaveTokenMap(tm TokenMap, key []byte, path string) error {
 
 // LoadTokenMap reads and decrypts a token map file produced by SaveTokenMap.
 func LoadTokenMap(key []byte, path string) (TokenMap, error) {
+	if len(key) != 32 {
+		return TokenMap{}, fmt.Errorf("key must be 256 bits (32 bytes), got %d", len(key))
+	}
 	ciphertext, err := os.ReadFile(path)
 	if err != nil {
 		return TokenMap{}, fmt.Errorf("reading token file: %w", err)

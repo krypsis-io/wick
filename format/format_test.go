@@ -58,6 +58,41 @@ func TestProcessJSON(t *testing.T) {
 	}
 }
 
+func TestProcessJSON_KeyedSecret(t *testing.T) {
+	// The aws-secret-access-key rule is keyword-anchored: the key name must be
+	// adjacent to the value. In JSON the name is the mapping key, so detection
+	// must use the key as context.
+	d := newDetector(t)
+	input := `{"aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYzzzzzzzzAB"}`
+	output, findings := ProcessJSON(input, d, redact.Redacted)
+
+	if len(findings) == 0 {
+		t.Fatal("expected the keyed AWS secret to be detected")
+	}
+	if strings.Contains(output, "wJalrXUtnFEMI") {
+		t.Errorf("secret should be redacted: %s", output)
+	}
+	if !strings.Contains(output, `"aws_secret_access_key"`) {
+		t.Errorf("expected key preserved: %s", output)
+	}
+}
+
+func TestProcessYAML_KeyedSecret(t *testing.T) {
+	d := newDetector(t)
+	input := "config:\n  aws_secret_access_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYzzzzzzzzAB\n  name: prod\n"
+	output, findings := ProcessYAML(input, d, redact.Redacted)
+
+	if len(findings) == 0 {
+		t.Fatal("expected the keyed AWS secret to be detected")
+	}
+	if strings.Contains(output, "wJalrXUtnFEMI") {
+		t.Errorf("secret should be redacted: %s", output)
+	}
+	if !strings.Contains(output, "name: prod") {
+		t.Errorf("expected other keys preserved: %s", output)
+	}
+}
+
 func TestProcessEnv(t *testing.T) {
 	d := newDetector(t)
 	input := "# Config\nAPI_KEY=AKIAZ5GMHYJKLMNOPQRS\nDB_NAME=mydb"

@@ -149,6 +149,7 @@ func runTokenize(cfg *config.Config) error {
 			return genErr
 		}
 		fmt.Fprintf(os.Stderr, "wick: key: %s\n", keyStr)
+		fmt.Fprintln(os.Stderr, "wick: WARNING: store this key securely — it is required to rehydrate and will not be shown again")
 	}
 
 	key, err := wick.DecodeKey(keyStr)
@@ -157,6 +158,12 @@ func runTokenize(cfg *config.Config) error {
 	}
 
 	var opts []wick.Option
+	if cfg.RulesFile != "" {
+		opts = append(opts, wick.WithRulesFile(cfg.RulesFile))
+	}
+	if len(cfg.DisableRules) > 0 {
+		opts = append(opts, wick.WithDisabledRules(cfg.DisableRules))
+	}
 	if len(cfg.CustomPatterns) > 0 {
 		opts = append(opts, wick.WithCustomPatterns(cfg.CustomPatterns))
 	}
@@ -164,14 +171,7 @@ func runTokenize(cfg *config.Config) error {
 		opts = append(opts, wick.WithAllowlist(cfg.Allowlist))
 	}
 	if len(cfg.Blocklist) > 0 {
-		var blockPatterns []detect.CustomPattern
-		for _, b := range cfg.Blocklist {
-			blockPatterns = append(blockPatterns, detect.CustomPattern{
-				Name:  b.Category,
-				Regex: b.Pattern,
-			})
-		}
-		opts = append(opts, wick.WithBlocklist(blockPatterns))
+		opts = append(opts, wick.WithBlocklist(blocklistToCustomPatterns(cfg.Blocklist)))
 	}
 
 	redacted, tm, err := wick.Dehydrate(input, opts...)
@@ -189,6 +189,9 @@ func runTokenize(cfg *config.Config) error {
 }
 
 func runRehydrate() error {
+	if len(flagFiles) > 0 || flagDir != "" {
+		return fmt.Errorf("--rehydrate only supports stdin input")
+	}
 	if flagKey == "" {
 		return fmt.Errorf("--rehydrate requires --key")
 	}
@@ -249,6 +252,19 @@ func validateRunFlags() error {
 	return nil
 }
 
+// blocklistToCustomPatterns converts config blocklist entries into always-detect
+// custom patterns, mapping each entry's Category to Name and Pattern to Regex.
+func blocklistToCustomPatterns(blocklist []config.BlocklistEntry) []detect.CustomPattern {
+	patterns := make([]detect.CustomPattern, 0, len(blocklist))
+	for _, b := range blocklist {
+		patterns = append(patterns, detect.CustomPattern{
+			Name:  b.Category,
+			Regex: b.Pattern,
+		})
+	}
+	return patterns
+}
+
 func newDetector(cfg *config.Config) (*detect.Detector, error) {
 	detector, err := detect.New()
 	if err != nil {
@@ -268,12 +284,7 @@ func newDetector(cfg *config.Config) (*detect.Detector, error) {
 	// Merge custom patterns and blocklist entries.
 	var allPatterns []detect.CustomPattern
 	allPatterns = append(allPatterns, cfg.CustomPatterns...)
-	for _, b := range cfg.Blocklist {
-		allPatterns = append(allPatterns, detect.CustomPattern{
-			Name:  b.Category,
-			Regex: b.Pattern,
-		})
-	}
+	allPatterns = append(allPatterns, blocklistToCustomPatterns(cfg.Blocklist)...)
 	if len(allPatterns) > 0 {
 		if err := detector.SetCustomPatterns(allPatterns); err != nil {
 			return nil, fmt.Errorf("config: %w", err)

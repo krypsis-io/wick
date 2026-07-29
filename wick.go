@@ -129,9 +129,11 @@ func Dehydrate(input string, opts ...Option) (string, TokenMap, error) {
 		return "", TokenMap{}, err
 	}
 
+	// Use the tokenizer directly rather than wrapping it with per-pattern
+	// replacement overrides: every replaced value must produce a reversible
+	// TokenEntry, and a static override string would redact irreversibly.
 	tr := redact.NewTokenizeReplacer()
-	replacer := buildReplacer(tr, cfg.customPatterns)
-	redacted, _ := format.Process(input, detector, replacer)
+	redacted, _ := format.Process(input, detector, tr)
 
 	entries := tr.Entries()
 	tm := TokenMap{entries: make(map[string]*TokenEntry, len(entries))}
