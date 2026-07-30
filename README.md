@@ -61,8 +61,8 @@ kubectl logs deploy/api | wick > forum-post.txt
 # Sanitize before dropping logs into a PR or issue thread
 cat app.log | wick > pr-comment-safe.log
 
-# Redact one or more files
-wick --file .env --file config.yaml
+# Redact one or more files by passing them directly
+wick .env config.yaml
 
 # Redact an entire directory into a safe copy
 wick --dir ./configs --out ./safe-configs
@@ -77,6 +77,12 @@ That makes it useful both as a sharing tool and as a guardrail in scripts or CI.
 ```bash
 # Human-readable redaction
 cat logs.txt | wick
+
+# Or point wick straight at a file — no cat, no pipe
+wick logs.txt
+
+# Redact several files at once
+wick .env config.yaml app.log
 
 # Prep debugging context for an LLM
 cat app.log | wick | pbcopy

@@ -33,12 +33,15 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "wick",
+	Use:   "wick [file...]",
 	Short: "Fast, zero-config secret and PII redaction for any text stream",
 	Long: `Wick detects and redacts secrets and PII from any text stream.
-Pipe anything through it: cat logs.txt | wick`,
+Pipe anything through it, or pass files directly:
+  cat logs.txt | wick
+  wick logs.txt config.yaml`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	Args:          cobra.ArbitraryArgs,
 	RunE:          run,
 }
 
@@ -76,7 +79,12 @@ func Execute() {
 	}
 }
 
-func run(_ *cobra.Command, _ []string) error {
+func run(_ *cobra.Command, args []string) error {
+	// Positional arguments are treated as input files, alongside any --file flags.
+	if len(args) > 0 {
+		flagFiles = append(flagFiles, args...)
+	}
+
 	if err := validateRunFlags(); err != nil {
 		return err
 	}
@@ -226,7 +234,7 @@ func readStdin() (string, error) {
 		return "", fmt.Errorf("stdin: %w", err)
 	}
 	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		return "", fmt.Errorf("no input: pipe data to wick or use --file/--dir")
+		return "", fmt.Errorf("no input: pipe data to wick, pass a file, or use --dir")
 	}
 	reader := io.LimitReader(os.Stdin, maxStdinBytes+1)
 	data, err := io.ReadAll(reader)
@@ -244,7 +252,7 @@ func validateRunFlags() error {
 		return fmt.Errorf("--tokenize and --rehydrate are mutually exclusive")
 	}
 	if flagDir != "" && len(flagFiles) > 0 {
-		return fmt.Errorf("--dir and --file are mutually exclusive")
+		return fmt.Errorf("--dir cannot be combined with file arguments or --file")
 	}
 	if flagOut != "" && flagDir == "" {
 		return fmt.Errorf("--out is only valid with --dir")
