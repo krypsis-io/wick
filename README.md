@@ -6,36 +6,17 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/krypsis-io/wick/badge)](https://securityscorecards.dev/viewer/?uri=github.com/krypsis-io/wick)
 
-Wick makes sensitive troubleshooting output safe to share with AI and humans.
+Wick redacts secrets and PII from text so it is safe to share — with an LLM, a forum, or a teammate.
 
-When you are troubleshooting, you often need to paste logs, configs, stack traces, or command output into ChatGPT or Claude to get unstuck. The problem is that the raw text usually contains secrets, internal identifiers, IP addresses, or other data you should not leak. The same problem shows up when you want to post those logs or config fragments into a public forum, a GitHub issue, or a PR thread to get help from other people. Most people handle this by eyeballing the text and manually find-and-replacing values, which is tedious and error-prone — or they skip it entirely and hope nothing sensitive slips through.
-
-Wick sits in that path. Pipe text through it, or point it at files and directories, and it will redact sensitive values while preserving the surrounding content so the result is still useful.
+Logs, configs, and stack traces routinely contain API keys, internal hostnames, and personal data. Wick strips them out while preserving the surrounding content, so the result is still useful for troubleshooting: `kubectl logs` before they go into Claude, a `.env` before it lands in a gist, a stack trace before it hits a GitHub issue.
 
 ![Wick demo](assets/demo.gif)
 
-## Why It Exists
-
-Most teams do not need another secret scanner dashboard. They need a fast way to sanitize raw troubleshooting output before it gets pasted into an LLM or posted somewhere other people can see it.
-
-Wick is built for that moment:
-
-- `kubectl logs` or stack traces before pasting them into ChatGPT or Claude
-- prompts or context blocks that include company-specific names, domains, or IP ranges
-- `kubectl describe` or `kubectl get` output before sending a snippet to someone else
-- logs or config fragments before posting on GitHub Issues, PR threads, Reddit, Discord, or Stack Overflow
-- `.env`, YAML, or JSON config before sharing it internally
-- ad hoc terminal output that is too risky to trust by inspection
-
-## What Wick Does
-
-- Detects secrets using bundled Gitleaks-derived rules
-- Detects common PII including emails, IP addresses, US phone numbers, and US SSNs
-- Supports custom patterns for internal project names, customer identifiers, hostnames, and other proprietary terms
-- Redacts values while keeping the rest of the text intact
-- Preserves structure for JSON, YAML, and `.env`-style input
-- Works as a Unix-style filter, on files, or across directories
-- Returns a non-zero exit code when findings are present, so it can gate automation
+- Detects secrets with bundled Gitleaks-derived rules, plus common PII (emails, IP addresses, US phone numbers, US SSNs)
+- Preserves structure for JSON, YAML, and `.env` input
+- Extensible with custom patterns, allowlists, and blocklists
+- Reversible mode: share redacted text, then restore the originals from an encrypted token map
+- Exits non-zero when findings are present, so it can gate scripts and CI
 
 ## Install
 
@@ -45,135 +26,91 @@ brew install krypsis-io/tap/wick
 
 Or download a binary from [Releases](https://github.com/krypsis-io/wick/releases).
 
-## Quick Start
+## Usage
 
 ```bash
-# Redact anything coming through stdin
+# Redact files
+wick app.log
+wick .env config.yaml
+
+# Redact anything on stdin
 kubectl logs deploy/api | wick
 env | wick
 
-# Sanitize before pasting into ChatGPT or Claude
+# Straight to the clipboard, ready to paste into an LLM
 kubectl logs deploy/api | wick | pbcopy
 
-# Sanitize before posting publicly
-kubectl logs deploy/api | wick > forum-post.txt
-
-# Sanitize before dropping logs into a PR or issue thread
-cat app.log | wick > pr-comment-safe.log
-
-# Redact one or more files by passing them directly
-wick .env config.yaml
+# Save a shareable copy
+wick app.log > issue-safe.log
 
 # Redact an entire directory into a safe copy
 wick --dir ./configs --out ./safe-configs
 ```
 
-If Wick finds secrets or PII, it redacts them and exits with code `1`. If nothing is found, it exits `0`.
+Exit code `1` means Wick found and redacted something; `0` means the input was clean.
 
-That makes it useful both as a sharing tool and as a guardrail in scripts or CI.
-
-## Examples
+### Output options
 
 ```bash
-# Human-readable redaction
-cat logs.txt | wick
-
-# Or point wick straight at a file — no cat, no pipe
-wick logs.txt
-
-# Redact several files at once
-wick .env config.yaml app.log
-
-# Prep debugging context for an LLM
-cat app.log | wick | pbcopy
-
-# Prep logs for a public bug report
-cat app.log | wick > issue-safe.log
-
-# Prep logs or config snippets for a PR discussion
-cat app.log | wick > pr-safe.log
-
-# JSON output for automation
-cat logs.txt | wick --format json
-
-# Print a summary to stderr
-cat logs.txt | wick --summary
-
-# Change replacement style
-cat logs.txt | wick --style stars
-cat logs.txt | wick --style custom="[REMOVED]"
+wick app.log --format json    # sanitized text plus machine-readable findings
+wick app.log --summary        # count of redactions, printed to stderr
+wick app.log --report         # per-finding detail (rule ID, location), printed to stderr
+wick app.log --style stars    # replacement style: redacted (default), stars, hash, custom="..."
 ```
 
-## Output Modes
+JSON output contains `redacted` (the sanitized content), `findings` (category, rule ID, and location for each match), and `summary` (counts by rule).
 
-### Default text output
+### Reversible redaction
 
-Wick prints the redacted content directly, so it still reads like the original input.
+Tokenize mode replaces each finding with a unique token and writes an encrypted map of the originals. Share the redacted text, then rehydrate the response to restore the real values.
 
 ```bash
-cat logs.txt | wick > safe-logs.txt
+# Redact with reversible tokens; the AES-256 key is printed once to stderr
+wick --tokenize < app.log > safe.log
+
+# Restore the original values
+wick --rehydrate --key <KEY> < safe.log
 ```
 
-### JSON output
-
-Use JSON when you need both the sanitized output and machine-readable finding metadata.
-
-```bash
-kubectl logs deploy/api | wick --format json
-```
-
-The JSON includes:
-
-- `redacted`: the sanitized content
-- `findings`: each finding with category, rule id, and location
-- `summary`: total findings and counts by rule
-
-### Summary output
-
-Use `--summary` to print a compact count of what Wick redacted to stderr.
-
-```bash
-kubectl logs deploy/api | wick --summary > safe-logs.txt
-```
-
-## Structured Input
-
-Wick auto-detects and preserves structure for:
-
-- JSON
-- YAML
-- `.env`
-- plain text
-
-That means the output stays useful after redaction instead of turning into a blob of broken formatting.
+The token map is written to `.wick-tokens.enc` by default (`--token-file` to change it). Both modes read from stdin only.
 
 ## Configuration
 
-Wick works without configuration, but you can add project-specific rules with `.wick.yaml`.
-
-This is the part that makes Wick useful for troubleshooting with AI or asking for help in public. Built-in rules catch common secrets and PII, while custom patterns let you redact internal names and identifiers that only matter in your environment.
-
-Wick loads:
-
-1. Global config from `~/.config/wick/config.yaml`
-2. Project config from the nearest `.wick.yaml` in the current directory or a parent directory
-
-Project config overrides global config. CLI flags override both.
-
-Example:
+Wick works with zero configuration. To add project-specific rules, create a `.wick.yaml`:
 
 ```yaml
 style: redacted
 format: text
 
+# Custom patterns, in addition to the built-in rules
 patterns:
   - name: internal-ticket
     regex: "ACME-\\d{4}"
-  - name: proprietary-project-name
-    regex: "\\bProject Lantern\\b"
-  - name: private-ip
-    regex: "192\\.168\\.\\d+\\.\\d+"
+  - name: internal-hostname
+    regex: "\\w+\\.internal\\.acme\\.com"
+    replacement: "[INTERNAL-HOST]"   # optional per-pattern replacement
+
+# Known-safe values that should never be redacted
+allowlist:
+  - pattern: "test@example\\.com"
+    regex: true
+    reason: "Test fixture email"
+
+# Values that must always be redacted, even if no built-in rule matches
+blocklist:
+  - pattern: "ACME-INTERNAL-[A-Z0-9]+"
+    category: "custom"
+    reason: "Internal project codes"
+
+# Extra Gitleaks-compatible rules from a TOML file
+rules_file: "./my-rules.toml"
+
+# Disable built-in rules by ID (use --report to see rule IDs)
+disable_rules:
+  - "generic-api-key"
 ```
+
+Config is loaded from `~/.config/wick/config.yaml` (global), then the nearest `.wick.yaml` walking up from the current directory (project). Project settings override global; CLI flags override both. See [.wick.yaml.example](.wick.yaml.example) for the full reference.
 
 ## Exit Codes
 
@@ -182,11 +119,9 @@ patterns:
 | `0` | No secrets or PII detected |
 | `1` | Secrets or PII detected, or command error |
 
-## When To Use It
+## Scope
 
-Use Wick when you already have troubleshooting output and need to make it safe now, especially before pasting it into an LLM, posting it publicly, or dropping it into an issue or PR discussion.
-
-If the real problem is broader secret hygiene, storage, rotation, or prevention, Wick is not a substitute for that. It is the last-mile safety layer for text you are about to share, save, inspect, or feed into AI tooling.
+Wick is a last-mile filter for text you are about to share. It is not a secrets manager and does not replace proper secret storage, rotation, or leak prevention.
 
 ## License
 
