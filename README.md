@@ -8,7 +8,7 @@
 
 Wick redacts secrets and PII from text so it is safe to share — with an LLM, a forum, or a teammate.
 
-Logs, configs, and stack traces routinely contain API keys, internal hostnames, and personal data. Wick strips them out while preserving the surrounding content, so the result is still useful for troubleshooting: `kubectl logs` before they go into Claude, a `.env` before it lands in a gist, a stack trace before it hits a GitHub issue.
+Logs, configs, and stack traces routinely contain API keys, internal hostnames, and personal data. Wick strips them out while preserving the surrounding content, so the result is still useful for troubleshooting: `kubectl logs` before they go into an AI chat, a `.env` before it lands in a gist, a stack trace before it hits a GitHub issue.
 
 ![Wick demo](assets/demo.gif)
 
@@ -20,11 +20,27 @@ Logs, configs, and stack traces routinely contain API keys, internal hostnames, 
 
 ## Install
 
+**Homebrew** (macOS, Linux):
+
 ```bash
 brew install krypsis-io/tap/wick
 ```
 
-Or download a binary from [Releases](https://github.com/krypsis-io/wick/releases).
+**Go**:
+
+```bash
+go install github.com/krypsis-io/wick/cmd/wick@latest
+```
+
+**Prebuilt binary** — download from [Releases](https://github.com/krypsis-io/wick/releases), or:
+
+```bash
+VERSION=0.2.0  # latest: https://github.com/krypsis-io/wick/releases/latest
+curl -sSL "https://github.com/krypsis-io/wick/releases/download/v${VERSION}/wick_${VERSION}_linux_amd64.tar.gz" | tar xz wick
+sudo install wick /usr/local/bin/
+```
+
+Archives are published for `linux`, `darwin`, and `windows` on `amd64` and `arm64`; adjust the name to match your platform.
 
 ## Usage
 
