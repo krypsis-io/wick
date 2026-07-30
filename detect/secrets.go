@@ -200,10 +200,17 @@ func matchSecretRules(rules []SecretRule, line string, lineNum int) []Finding {
 	return findings
 }
 
-func isAllowed(allows []compiledAllow, line, value string) bool {
+// isAllowed reports whether any allowlist suppresses a finding. Targets mirror
+// gitleaks: regexes run against the secret by default, the full regex match for
+// RegexTarget == "match", or the line for RegexTarget == "line"; stopwords
+// always run against the secret.
+func isAllowed(allows []compiledAllow, line, fullMatch, secret string) bool {
 	for _, a := range allows {
-		target := value
-		if a.RegexTarget == "line" {
+		target := secret
+		switch a.RegexTarget {
+		case "match":
+			target = fullMatch
+		case "line":
 			target = line
 		}
 
@@ -228,7 +235,7 @@ func isAllowed(allows []compiledAllow, line, value string) bool {
 		}
 
 		for _, sw := range a.StopWords {
-			if strings.Contains(strings.ToLower(value), strings.ToLower(sw)) {
+			if strings.Contains(strings.ToLower(secret), strings.ToLower(sw)) {
 				return true
 			}
 		}

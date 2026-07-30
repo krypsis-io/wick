@@ -145,20 +145,33 @@ func extractLine(s string, pos int) string {
 // RegexTarget == "line": for per-line calls text == lineContext; for full-input calls
 // pass the specific matched line via extractLine so the allowlist sees the right scope.
 func resolveMatch(rule *SecretRule, text, lineContext string, match []int, lineNum int) (Finding, bool) {
-	group := rule.SecretGroup
-	startIdx := group * 2
-	endIdx := startIdx + 1
-	if startIdx >= len(match) || match[startIdx] < 0 {
-		startIdx = 0
-		endIdx = 1
+	// Mirror gitleaks: the secret is the configured secretGroup, or the first
+	// non-empty capture group when secretGroup is unset, or the full match only
+	// when the regex has no capturing groups. Entropy and stopword checks run
+	// against the secret, not the full match — otherwise key names like
+	// "password" in `password=...` trip the rule's own stopword list.
+	startIdx, endIdx := 0, 1
+	if rule.SecretGroup > 0 {
+		si := rule.SecretGroup * 2
+		if si+1 < len(match) && match[si] >= 0 {
+			startIdx, endIdx = si, si+1
+		}
+	} else {
+		for gi := 2; gi+1 < len(match); gi += 2 {
+			if match[gi] >= 0 && match[gi] < match[gi+1] {
+				startIdx, endIdx = gi, gi+1
+				break
+			}
+		}
 	}
 	start := match[startIdx]
 	end := match[endIdx]
 	value := text[start:end]
+	fullMatch := text[match[0]:match[1]]
 	if rule.Entropy > 0 && shannonEntropy(value) < rule.Entropy {
 		return Finding{}, false
 	}
-	if isAllowed(rule.Allowlists, lineContext, value) {
+	if isAllowed(rule.Allowlists, lineContext, fullMatch, value) {
 		return Finding{}, false
 	}
 	return Finding{
