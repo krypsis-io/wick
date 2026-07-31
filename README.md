@@ -32,15 +32,15 @@ brew install krypsis-io/tap/wick
 go install github.com/krypsis-io/wick/cmd/wick@latest
 ```
 
-**Prebuilt binary** — download from [Releases](https://github.com/krypsis-io/wick/releases), or:
+**Shell installer** (Linux, macOS):
 
 ```bash
-VERSION=0.2.0  # latest: https://github.com/krypsis-io/wick/releases/latest
-curl -sSL "https://github.com/krypsis-io/wick/releases/download/v${VERSION}/wick_${VERSION}_linux_amd64.tar.gz" | tar xz wick
-sudo install wick /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/krypsis-io/wick/main/install.sh | sh
 ```
 
-Archives are published for `linux`, `darwin`, and `windows` on `amd64` and `arm64`; adjust the name to match your platform.
+The script downloads the latest release for your platform, verifies its SHA-256 checksum, and installs to `/usr/local/bin` (falling back to `~/.local/bin`). Set `WICK_INSTALL_DIR` to change the destination or `WICK_VERSION` to pin a version.
+
+**Prebuilt binary** — archives for Linux, macOS, and Windows (`amd64`/`arm64`) with checksums are on [Releases](https://github.com/krypsis-io/wick/releases).
 
 ## Usage
 
