@@ -87,7 +87,7 @@ func (d *Detector) Detect(input string) []Finding {
 		all = append(all, matchPII(line, lineNum, d.disabledPII)...)
 		all = append(all, matchCustom(d.customPatterns, line, lineNum)...)
 	}
-	return d.filterAllowed(all)
+	return dedupeIdenticalSpans(d.filterAllowed(all))
 }
 
 // DetectMultiline runs only multiline-capable rules against the full unsplit input.
@@ -124,7 +124,49 @@ func (d *Detector) DetectMultiline(input string) []Finding {
 			}
 		}
 	}
-	return d.filterAllowed(all)
+	return dedupeIdenticalSpans(d.filterAllowed(all))
+}
+
+// dedupeIdenticalSpans collapses findings that cover the exact same span into a
+// single finding, so summaries and reports count redacted values, not the number
+// of rules that happened to match them (e.g. a GitHub PAT matches both
+// github-pat and the generic-api-key catch-all). The most specific finding wins:
+// user-defined custom patterns first (their per-rule replacements must apply),
+// then specific secret rules, then PII, with the generic-api-key catch-all
+// always losing to a co-match. Ties keep the first finding in rule order.
+func dedupeIdenticalSpans(findings []Finding) []Finding {
+	if len(findings) < 2 {
+		return findings
+	}
+	type spanKey struct{ line, start, end int }
+	out := make([]Finding, 0, len(findings))
+	idx := make(map[spanKey]int, len(findings))
+	for _, f := range findings {
+		k := spanKey{f.Line, f.Start, f.End}
+		if i, ok := idx[k]; ok {
+			if dedupePriority(f) < dedupePriority(out[i]) {
+				out[i] = f
+			}
+			continue
+		}
+		idx[k] = len(out)
+		out = append(out, f)
+	}
+	return out
+}
+
+// dedupePriority orders findings on identical spans; lower wins.
+func dedupePriority(f Finding) int {
+	switch {
+	case f.Category == "custom":
+		return 0
+	case f.RuleID == "generic-api-key":
+		return 3
+	case f.Category == "secret":
+		return 1
+	default: // pii
+		return 2
+	}
 }
 
 // extractLine returns the single line within s that contains byte position pos.
@@ -145,20 +187,39 @@ func extractLine(s string, pos int) string {
 // RegexTarget == "line": for per-line calls text == lineContext; for full-input calls
 // pass the specific matched line via extractLine so the allowlist sees the right scope.
 func resolveMatch(rule *SecretRule, text, lineContext string, match []int, lineNum int) (Finding, bool) {
-	group := rule.SecretGroup
-	startIdx := group * 2
-	endIdx := startIdx + 1
-	if startIdx >= len(match) || match[startIdx] < 0 {
-		startIdx = 0
-		endIdx = 1
+	// Mirror gitleaks: the secret is the configured secretGroup, or the first
+	// non-empty capture group when secretGroup is unset, or the full match when
+	// no capture group applies. Entropy and stopword checks run against the
+	// secret, not the full match — otherwise key names like "password" in
+	// `password=...` trip the rule's own stopword list.
+	startIdx, endIdx := 0, 1
+	if rule.SecretGroup > 0 {
+		// A configured group that is out of range, unmatched, or empty is a
+		// rule misconfiguration; gitleaks rejects the match rather than
+		// falling back to the full match.
+		si := rule.SecretGroup * 2
+		if si+1 >= len(match) || match[si] < 0 || match[si] >= match[si+1] {
+			return Finding{}, false
+		}
+		startIdx, endIdx = si, si+1
+	} else {
+		// When every capture group is empty, gitleaks keeps the full match as
+		// the secret; do the same rather than dropping the finding.
+		for gi := 2; gi+1 < len(match); gi += 2 {
+			if match[gi] >= 0 && match[gi] < match[gi+1] {
+				startIdx, endIdx = gi, gi+1
+				break
+			}
+		}
 	}
 	start := match[startIdx]
 	end := match[endIdx]
 	value := text[start:end]
+	fullMatch := text[match[0]:match[1]]
 	if rule.Entropy > 0 && shannonEntropy(value) < rule.Entropy {
 		return Finding{}, false
 	}
-	if isAllowed(rule.Allowlists, lineContext, value) {
+	if isAllowed(rule.Allowlists, lineContext, fullMatch, value) {
 		return Finding{}, false
 	}
 	return Finding{
