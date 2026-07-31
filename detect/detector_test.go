@@ -167,6 +167,36 @@ func TestDetector_GenericKeyedSecret(t *testing.T) {
 	}
 }
 
+func TestDetector_DedupeIdenticalSpans(t *testing.T) {
+	d, err := New()
+	if err != nil {
+		t.Fatalf("failed to create detector: %v", err)
+	}
+
+	// A GitHub PAT matches both github-pat and the generic-api-key catch-all
+	// on the identical span; only the specific rule must survive.
+	findings := d.Detect(`GITHUB_TOKEN=ghp_x7K2mQ9vLp4TzR8wKd3NbY5cJ6hF0aGtE1sD`)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding after dedupe, got %+v", findings)
+	}
+	if findings[0].RuleID != "github-pat" {
+		t.Errorf("expected github-pat to win dedupe, got %q", findings[0].RuleID)
+	}
+
+	// A custom pattern covering the same span must win over built-in rules so
+	// its per-rule replacement applies.
+	if err := d.SetCustomPatterns([]CustomPattern{{Name: "corp-token", Regex: `ghp_\w{36}`}}); err != nil {
+		t.Fatalf("SetCustomPatterns: %v", err)
+	}
+	findings = d.Detect(`GITHUB_TOKEN=ghp_x7K2mQ9vLp4TzR8wKd3NbY5cJ6hF0aGtE1sD`)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding after dedupe, got %+v", findings)
+	}
+	if findings[0].RuleID != "corp-token" {
+		t.Errorf("expected custom pattern to win dedupe, got %q", findings[0].RuleID)
+	}
+}
+
 func TestResolveMatch_SecretGroupEdgeCases(t *testing.T) {
 	tests := []struct {
 		name      string

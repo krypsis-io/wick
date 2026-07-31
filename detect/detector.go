@@ -87,7 +87,7 @@ func (d *Detector) Detect(input string) []Finding {
 		all = append(all, matchPII(line, lineNum, d.disabledPII)...)
 		all = append(all, matchCustom(d.customPatterns, line, lineNum)...)
 	}
-	return d.filterAllowed(all)
+	return dedupeIdenticalSpans(d.filterAllowed(all))
 }
 
 // DetectMultiline runs only multiline-capable rules against the full unsplit input.
@@ -124,7 +124,49 @@ func (d *Detector) DetectMultiline(input string) []Finding {
 			}
 		}
 	}
-	return d.filterAllowed(all)
+	return dedupeIdenticalSpans(d.filterAllowed(all))
+}
+
+// dedupeIdenticalSpans collapses findings that cover the exact same span into a
+// single finding, so summaries and reports count redacted values, not the number
+// of rules that happened to match them (e.g. a GitHub PAT matches both
+// github-pat and the generic-api-key catch-all). The most specific finding wins:
+// user-defined custom patterns first (their per-rule replacements must apply),
+// then specific secret rules, then PII, with the generic-api-key catch-all
+// always losing to a co-match. Ties keep the first finding in rule order.
+func dedupeIdenticalSpans(findings []Finding) []Finding {
+	if len(findings) < 2 {
+		return findings
+	}
+	type spanKey struct{ line, start, end int }
+	out := make([]Finding, 0, len(findings))
+	idx := make(map[spanKey]int, len(findings))
+	for _, f := range findings {
+		k := spanKey{f.Line, f.Start, f.End}
+		if i, ok := idx[k]; ok {
+			if dedupePriority(f) < dedupePriority(out[i]) {
+				out[i] = f
+			}
+			continue
+		}
+		idx[k] = len(out)
+		out = append(out, f)
+	}
+	return out
+}
+
+// dedupePriority orders findings on identical spans; lower wins.
+func dedupePriority(f Finding) int {
+	switch {
+	case f.Category == "custom":
+		return 0
+	case f.RuleID == "generic-api-key":
+		return 3
+	case f.Category == "secret":
+		return 1
+	default: // pii
+		return 2
+	}
 }
 
 // extractLine returns the single line within s that contains byte position pos.
