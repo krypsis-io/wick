@@ -80,18 +80,17 @@ func Execute() {
 }
 
 func run(_ *cobra.Command, args []string) error {
-	// Positional arguments are treated as input files, alongside any --file flags.
-	if len(args) > 0 {
-		flagFiles = append(flagFiles, args...)
-	}
+	// Positional arguments are treated as input files, alongside any --file
+	// flags. Build a local slice rather than mutating package-level flag state.
+	files := append(append([]string(nil), flagFiles...), args...)
 
-	if err := validateRunFlags(); err != nil {
+	if err := validateRunFlags(files); err != nil {
 		return err
 	}
 
 	// Rehydrate is a separate mode: read stdin, restore originals, done.
 	if flagRehydrate {
-		return runRehydrate()
+		return runRehydrate(files)
 	}
 
 	cfg, err := config.Load()
@@ -101,7 +100,7 @@ func run(_ *cobra.Command, args []string) error {
 
 	// Tokenize mode: use reversible token replacer instead of normal style.
 	if flagTokenize {
-		return runTokenize(cfg)
+		return runTokenize(cfg, files)
 	}
 
 	baseReplacer, err := resolveReplacer(cfg)
@@ -123,7 +122,7 @@ func run(_ *cobra.Command, args []string) error {
 
 	opts := runOptions{
 		dir:   flagDir,
-		files: flagFiles,
+		files: files,
 		out:   flagOut,
 	}
 
@@ -138,8 +137,8 @@ func run(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runTokenize(cfg *config.Config) error {
-	if len(flagFiles) > 0 || flagDir != "" {
+func runTokenize(cfg *config.Config, files []string) error {
+	if len(files) > 0 || flagDir != "" {
 		return fmt.Errorf("--tokenize only supports stdin input")
 	}
 
@@ -196,8 +195,8 @@ func runTokenize(cfg *config.Config) error {
 	return nil
 }
 
-func runRehydrate() error {
-	if len(flagFiles) > 0 || flagDir != "" {
+func runRehydrate(files []string) error {
+	if len(files) > 0 || flagDir != "" {
 		return fmt.Errorf("--rehydrate only supports stdin input")
 	}
 	if flagKey == "" {
@@ -247,11 +246,11 @@ func readStdin() (string, error) {
 	return string(data), nil
 }
 
-func validateRunFlags() error {
+func validateRunFlags(files []string) error {
 	if flagTokenize && flagRehydrate {
 		return fmt.Errorf("--tokenize and --rehydrate are mutually exclusive")
 	}
-	if flagDir != "" && len(flagFiles) > 0 {
+	if flagDir != "" && len(files) > 0 {
 		return fmt.Errorf("--dir cannot be combined with file arguments or --file")
 	}
 	if flagOut != "" && flagDir == "" {

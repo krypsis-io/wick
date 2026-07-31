@@ -146,17 +146,23 @@ func extractLine(s string, pos int) string {
 // pass the specific matched line via extractLine so the allowlist sees the right scope.
 func resolveMatch(rule *SecretRule, text, lineContext string, match []int, lineNum int) (Finding, bool) {
 	// Mirror gitleaks: the secret is the configured secretGroup, or the first
-	// non-empty capture group when secretGroup is unset, or the full match only
-	// when the regex has no capturing groups. Entropy and stopword checks run
-	// against the secret, not the full match — otherwise key names like
-	// "password" in `password=...` trip the rule's own stopword list.
+	// non-empty capture group when secretGroup is unset, or the full match when
+	// no capture group applies. Entropy and stopword checks run against the
+	// secret, not the full match — otherwise key names like "password" in
+	// `password=...` trip the rule's own stopword list.
 	startIdx, endIdx := 0, 1
 	if rule.SecretGroup > 0 {
+		// A configured group that is out of range, unmatched, or empty is a
+		// rule misconfiguration; gitleaks rejects the match rather than
+		// falling back to the full match.
 		si := rule.SecretGroup * 2
-		if si+1 < len(match) && match[si] >= 0 {
-			startIdx, endIdx = si, si+1
+		if si+1 >= len(match) || match[si] < 0 || match[si] >= match[si+1] {
+			return Finding{}, false
 		}
+		startIdx, endIdx = si, si+1
 	} else {
+		// When every capture group is empty, gitleaks keeps the full match as
+		// the secret; do the same rather than dropping the finding.
 		for gi := 2; gi+1 < len(match); gi += 2 {
 			if match[gi] >= 0 && match[gi] < match[gi+1] {
 				startIdx, endIdx = gi, gi+1

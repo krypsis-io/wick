@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"regexp"
 	"testing"
 )
 
@@ -161,6 +162,67 @@ func TestDetector_GenericKeyedSecret(t *testing.T) {
 			}
 			if found != tt.want {
 				t.Errorf("got found=%v, want %v, findings: %+v", found, tt.want, findings)
+			}
+		})
+	}
+}
+
+func TestResolveMatch_SecretGroupEdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		regex     string
+		group     int
+		input     string
+		want      bool
+		wantValue string
+	}{
+		{
+			// Misconfigured secretGroup beyond the regex's groups: reject the
+			// match (gitleaks parity) instead of falling back to the full match.
+			name:  "configured group out of range",
+			regex: `token=(\w+)`,
+			group: 5,
+			input: `token=abc123def456`,
+			want:  false,
+		},
+		{
+			// Configured group participates but matches empty: reject.
+			name:  "configured group empty",
+			regex: `token=(\d*)[a-z]+`,
+			group: 1,
+			input: `token=abcdef`,
+			want:  false,
+		},
+		{
+			// No secretGroup and no capture group participated: keep the full
+			// match as the secret (gitleaks parity) — dropping the finding
+			// would leak the value.
+			name:      "inferred group absent falls back to full match",
+			regex:     `(?:(foo)|bar)secret\w+`,
+			group:     0,
+			input:     `barsecretvalue99`,
+			want:      true,
+			wantValue: `barsecretvalue99`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := SecretRule{
+				ID:          "test-rule",
+				Regex:       regexp.MustCompile(tt.regex),
+				SecretGroup: tt.group,
+			}
+			findings := matchSecretRules([]SecretRule{rule}, tt.input, 1)
+			if tt.want {
+				if len(findings) != 1 {
+					t.Fatalf("expected 1 finding, got %+v", findings)
+				}
+				if findings[0].Value != tt.wantValue {
+					t.Errorf("got value %q, want %q", findings[0].Value, tt.wantValue)
+				}
+			} else if len(findings) != 0 {
+				t.Errorf("expected no findings, got %+v", findings)
 			}
 		})
 	}
