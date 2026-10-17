@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   release:
-    uses: krypsis-io/.github/.github/workflows/release.yml@main
+    uses: krypsis-io/.github/.github/workflows/release-please.yml@main
+    with:
+      bootstrap-config: false
     secrets:
       APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

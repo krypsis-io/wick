@@ -28,11 +28,16 @@ Use the format `<type>/<short-description>`:
 
 ## Commit Messages
 
-We use [Conventional Commits](https://www.conventionalcommits.org/) for automatic versioning:
+We use [Conventional Commits](https://www.conventionalcommits.org/). PRs are squash-merged, so the PR title becomes the commit and decides the version bump:
 
-- `feat: add IPv6 detection` — triggers a minor version bump
-- `fix: handle empty input gracefully` — triggers a patch version bump
-- `feat!: change default redaction style` — triggers a major version bump
+- `feat: add IPv6 detection`: minor bump
+- `fix: handle empty input gracefully`: patch bump
+- `feat!: change default redaction style`: major bump (a minor bump while wick is 0.x)
+- `chore`, `ci`, `docs`, `test`, `build`, `style`: no release on their own
+
+## Releases
+
+Releases are cut with [release-please](https://github.com/googleapis/release-please). Merging releasable commits to `main` opens or updates a `chore: release x.y.z` PR with the version and changelog. Nothing is published until a maintainer merges that PR, which tags the release, and GoReleaser then builds and attaches the binaries.
 
 ## Easy First Contributions
 
