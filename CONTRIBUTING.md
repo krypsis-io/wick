@@ -33,6 +33,7 @@ We use [Conventional Commits](https://www.conventionalcommits.org/). PRs are squ
 - `feat: add IPv6 detection`: minor bump
 - `fix: handle empty input gracefully`: patch bump
 - `feat!: change default redaction style`: major bump (a minor bump while wick is 0.x)
+- `deps: update module ...`: patch bump (Renovate uses this for Go module updates)
 - `chore`, `ci`, `docs`, `test`, `build`, `style`: no release on their own
 
 ## Releases

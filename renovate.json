@@ -1,4 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>krypsis-io/renovate-config"]
+  "extends": ["github>krypsis-io/renovate-config"],
+  "packageRules": [
+    {
+      "description": "Go module updates ship in the binary: use the deps type so release-please lists them under Dependencies and opens a release PR",
+      "matchManagers": ["gomod"],
+      "commitMessagePrefix": "deps:"
+    }
+  ]
 }
