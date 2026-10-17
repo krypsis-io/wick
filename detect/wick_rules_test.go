@@ -41,7 +41,11 @@ func TestWickRules(t *testing.T) {
 		{"single-quoted password", `passwd = 'letmein99'`, "password-assignment", "letmein99"},
 		{"_PASS suffix", `DB_PASS=letmein99`, "password-assignment", "letmein99"},
 		{"escaped json password", `{\"password\":\"hunter2horse\"}`, "password-assignment", "hunter2horse"},
+		{"semicolon inside password", `password=P@ss;word1`, "password-assignment", "P@ss;word1"},
+		{"comma inside password", `password=hunter,2horse`, "password-assignment", "hunter,2horse"},
+		{"ampersand inside password", `password=hunter2&horse`, "password-assignment", "hunter2&horse"},
 		{"env reference", `password=${DB_PASSWORD}`, "", ""},
+		{"env reference with terminator", `password=${DB_PASSWORD};`, "", ""},
 		{"bare env reference", `password=$DB_PASSWORD`, "", ""},
 		{"template", `password: {{.Values.pw}}`, "", ""},
 		{"angle placeholder", `password: <your-password>`, "", ""},
@@ -58,6 +62,7 @@ func TestWickRules(t *testing.T) {
 		// env-secret-assignment: upper-case secret-named vars, entropy 3.0.
 		{"hex api key", `FINNHUB_KEY=6320eaa997719c9109d247c040d7414e`, "env-secret-assignment", "6320eaa997719c9109d247c040d7414e"},
 		{"env token", `GITEA_TOKEN: 9f8e7d6c5b4a39281706f5e4d3c2b1a0`, "env-secret-assignment", "9f8e7d6c5b4a39281706f5e4d3c2b1a0"},
+		{"ampersand inside token", `DB_TOKEN=a8f3k2&m9x7q1z4`, "env-secret-assignment", "a8f3k2&m9x7q1z4"},
 		{"low-entropy word", `SORT_KEY=timestamp`, "", ""},
 		{"key id is not a key", `AWS_ACCESS_KEY_ID=notasecretvalue1`, "", ""},
 
