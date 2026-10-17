@@ -71,7 +71,9 @@ func looksLikeYAML(content string) bool {
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "---") {
+		// A YAML document marker is exactly "---" (optionally followed by
+		// content after a space); "-----BEGIN ... KEY-----" is PEM, not YAML.
+		if trimmed == "---" || strings.HasPrefix(trimmed, "--- ") {
 			yamlIndicators++
 			continue
 		}

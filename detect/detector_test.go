@@ -99,6 +99,10 @@ func TestDetector_GenericKeyedSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create detector: %v", err)
 	}
+	// Exercise generic-api-key alone: wick's password-assignment rule
+	// deliberately matches these inputs too (including low-entropy ones) and
+	// wins dedupe on identical spans.
+	d.DisableRules([]string{"password-assignment"})
 
 	tests := []struct {
 		name      string

@@ -2,6 +2,7 @@ package detect
 
 import (
 	"embed"
+	"fmt"
 	"math"
 	"regexp"
 	"strings"
@@ -9,8 +10,12 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
-//go:embed patterns/gitleaks.toml
+//go:embed patterns/gitleaks.toml patterns/wick.toml
 var embeddedPatterns embed.FS
+
+// embeddedRuleFiles are loaded in order: the upstream gitleaks rules, then
+// wick's own rules, which cover log-redaction gaps gitleaks does not target.
+var embeddedRuleFiles = []string{"patterns/gitleaks.toml", "patterns/wick.toml"}
 
 // gitleaksConfig is the top-level TOML structure.
 type gitleaksConfig struct {
@@ -62,13 +67,21 @@ type compiledAllow struct {
 	Condition   string // "AND" or "OR"
 }
 
-// LoadSecretRules parses the embedded gitleaks.toml and returns compiled rules.
+// LoadSecretRules parses the embedded rule files and returns compiled rules.
 func LoadSecretRules() ([]SecretRule, error) {
-	data, err := embeddedPatterns.ReadFile("patterns/gitleaks.toml")
-	if err != nil {
-		return nil, err
+	var rules []SecretRule
+	for _, name := range embeddedRuleFiles {
+		data, err := embeddedPatterns.ReadFile(name)
+		if err != nil {
+			return nil, err
+		}
+		parsed, err := parseGitleaksTOML(data)
+		if err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", name, err)
+		}
+		rules = append(rules, parsed...)
 	}
-	return parseGitleaksTOML(data)
+	return rules, nil
 }
 
 // LoadSecretRulesFromBytes parses a gitleaks-compatible TOML and returns compiled rules.

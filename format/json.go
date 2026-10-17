@@ -39,22 +39,44 @@ func redactKeyedString(key, val string, d *detect.Detector, replacer redact.Repl
 	if key == "" {
 		return redactString(val, d, replacer, findings)
 	}
+	return redactInContext([]string{key + "="}, val, d, replacer, findings)
+}
 
-	prefix := key + "="
+// redactPairValue redacts the value half of a {name: ..., value: ...} pair
+// (Portainer, Kubernetes env, ECS, CloudFormation tags). The sibling name is
+// the real key, so it is used as detection context instead of "value": once as
+// NAME=value for keyword-anchored rules, and once as the JSON pair itself so
+// the name-value-secret rule can match regardless of the value's entropy.
+func redactPairValue(name, val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
+	prefixes := []string{name + "="}
+	if !strings.ContainsAny(name, `"\`) {
+		prefixes = append(prefixes, `{"name":"`+name+`","value":"`)
+	}
+	return redactInContext(prefixes, val, d, replacer, findings)
+}
+
+// redactInContext detects against each prefix+value on the first line of val,
+// keeping only matches that fall entirely within the value, remapped to
+// value-relative offsets. Findings from different prefixes that overlap one
+// already kept are dropped so a value is counted once. Later lines are
+// detected without context.
+func redactInContext(prefixes []string, val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
 	lines := strings.Split(val, "\n")
 	changed := false
 	for i, line := range lines {
 		var found []detect.Finding
 		if i == 0 {
-			// Detect against "key=value" and keep only matches that fall entirely
-			// within the value portion, remapped to value-relative offsets.
-			for _, f := range d.Detect(prefix + line) {
-				if f.Start < len(prefix) {
-					continue // match started inside the synthetic key; ignore it
+			for _, prefix := range prefixes {
+				for _, f := range d.Detect(prefix + line) {
+					if f.Start < len(prefix) {
+						continue // match started inside the synthetic context; ignore it
+					}
+					f.Start -= len(prefix)
+					f.End -= len(prefix)
+					if !overlapsAny(found, f) {
+						found = append(found, f)
+					}
 				}
-				f.Start -= len(prefix)
-				f.End -= len(prefix)
-				found = append(found, f)
 			}
 		} else {
 			found = d.Detect(line)
@@ -72,6 +94,37 @@ func redactKeyedString(key, val string, d *detect.Detector, replacer redact.Repl
 		return strings.Join(lines, "\n"), true
 	}
 	return val, false
+}
+
+func overlapsAny(kept []detect.Finding, f detect.Finding) bool {
+	for _, k := range kept {
+		if f.Start < k.End && k.Start < f.End {
+			return true
+		}
+	}
+	return false
+}
+
+// pairName returns the sibling name of a {name, value} style object, given a
+// lookup of the object's string fields. It reports false when the object has
+// no value field or no name/key field.
+func pairName(field func(string) (string, bool)) (string, bool) {
+	if _, ok := field("value"); !ok {
+		if _, ok := field("Value"); !ok {
+			return "", false
+		}
+	}
+	for _, k := range []string{"name", "Name", "key", "Key"} {
+		if n, ok := field(k); ok && n != "" {
+			return n, true
+		}
+	}
+	return "", false
+}
+
+// isPairValueKey reports whether k is the value field of a {name, value} pair.
+func isPairValueKey(k string) bool {
+	return k == "value" || k == "Value"
 }
 
 // ProcessJSON parses JSON, redacts string values, and preserves structure.
@@ -107,11 +160,20 @@ func walkJSON(v any, d *detect.Detector, replacer redact.Replacer, findings *[]d
 	switch val := v.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(val))
+		name, isPair := pairName(func(k string) (string, bool) {
+			s, ok := val[k].(string)
+			return s, ok
+		})
 		for k, child := range val {
 			// Redact string values with their key as detection context so
 			// keyword-anchored rules match; recurse into everything else.
 			if s, ok := child.(string); ok {
-				if red, changed := redactKeyedString(k, s, d, replacer, findings); changed {
+				redactFn := redactKeyedString
+				ctxKey := k
+				if isPair && isPairValueKey(k) {
+					redactFn, ctxKey = redactPairValue, name
+				}
+				if red, changed := redactFn(ctxKey, s, d, replacer, findings); changed {
 					result[k] = red
 				} else {
 					result[k] = s

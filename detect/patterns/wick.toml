@@ -1,0 +1,83 @@
+# wick's own detection rules, layered on top of the upstream gitleaks.toml
+# (which is auto-generated and must not be edited by hand). Same format.
+#
+# These cover gaps that matter for redacting logs rather than scanning repos:
+# human-chosen passwords that fail gitleaks' entropy thresholds, and secrets
+# whose key name sits in a sibling field (Portainer, Kubernetes, ECS, docker
+# inspect: {"name": "DB_PASSWORD", "value": "..."}).
+#
+# Every rule shares the same placeholder allowlist so that env references,
+# templates, masks, and wick's own replacement markers are not re-redacted.
+
+title = "wick"
+
+[[rules]]
+id = "password-assignment"
+description = "Password assigned to a password-like key. No entropy threshold: human-chosen passwords are low entropy by nature."
+regex = '''(?i)[\w.-]{0,40}?(?:passw(?:or)?d|pwd|passphrase|[_.-]pass\b)[\w.-]{0,20}\\?["']?[ \t]{0,3}(?:=>|:=|=|:)[ \t]{0,3}(?:\\?"([^"\\\r\n]{6,128})\\?"|'([^'\\\r\n]{6,128})'|([^\s"'\x60\\&;,]{6,128}))'''
+keywords = ["passw", "pwd", "passphrase", "_pass", ".pass", "-pass"]
+[[rules.allowlists]]
+description = "Placeholders, references, and wick's own replacement markers"
+regexes = [
+    '''^\$\{.*\}$''',
+    '''^\$[A-Za-z_]\w*$''',
+    '''^\$\(''',
+    '''^\{\{.*\}\}$''',
+    '''^%\(?\w*\)?s$''',
+    '''^<[^>]*>$''',
+    '''^[*•x.]+$''',
+    '''^\[[A-Z0-9_-]+(?:[:-][0-9a-f]+|-\d+)?\]$''',
+    '''(?i)^(?:changeme|change_me|password|passwd|null|nil|none|true|false|undefined|required|optional|string|redacted|example|secret|placeholder|hidden|masked|empty|your[_-]?password\w*)$''',
+    '''^(?:/|~/|\./|\.\./)''',
+    '''^[A-Za-z_][\w.]*\(''',
+]
+
+[[rules]]
+id = "env-secret-assignment"
+description = "Upper-case environment-style variable whose name marks it as a secret (FOO_KEY, FOO_TOKEN, FOO_SECRET, ...), with a lower entropy threshold than generic-api-key."
+regex = '''(?-i)\b[A-Z][A-Z0-9_]*_(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|PWD|CREDENTIALS?|AUTH|APIKEY)\b\\?["']?[ \t]{0,3}(?:=|:)[ \t]{0,3}\\?["']?([^\s"'\x60\\&;,]{8,256})'''
+entropy = 3.0
+keywords = ["_key", "_token", "_secret", "_pass", "_pwd", "_credential", "_auth", "_apikey"]
+[[rules.allowlists]]
+description = "Placeholders, references, and wick's own replacement markers"
+regexes = [
+    '''^\$\{.*\}$''',
+    '''^\$[A-Za-z_]\w*$''',
+    '''^\$\(''',
+    '''^\{\{.*\}\}$''',
+    '''^<[^>]*>$''',
+    '''^[*•x.]+$''',
+    '''^\[[A-Z0-9_-]+(?:[:-][0-9a-f]+|-\d+)?\]$''',
+    '''(?i)^(?:changeme|change_me|null|nil|none|true|false|undefined|required|optional|redacted|example|placeholder|hidden|masked|empty)$''',
+    '''^(?:/|~/|\./|\.\./)''',
+    '''^[A-Za-z_][\w.]*\(''',
+]
+
+[[rules]]
+id = "name-value-secret"
+description = "Value of a {\"name\": ..., \"value\": ...} pair whose name marks it as a secret (Portainer, Kubernetes, ECS, docker inspect). No entropy threshold."
+regex = '''(?i)\\?"(?:name|key)\\?"[ \t]*:[ \t]*\\?"[^"\\]*?(?:key|token|secret|passw(?:or)?d|pwd|passphrase|credential|creds|auth|private)[^"\\]*\\?"[ \t]*,[ \t]*\\?"value\\?"[ \t]*:[ \t]*\\?"([^"\\]{6,1000})|\\?"value\\?"[ \t]*:[ \t]*\\?"([^"\\]{6,1000})\\?"[ \t]*,[ \t]*\\?"(?:name|key)\\?"[ \t]*:[ \t]*\\?"[^"\\]*?(?:key|token|secret|passw(?:or)?d|pwd|passphrase|credential|creds|auth|private)'''
+keywords = ["value"]
+[[rules.allowlists]]
+description = "Placeholders, references, and wick's own replacement markers"
+regexes = [
+    '''^\$\{.*\}$''',
+    '''^\$[A-Za-z_]\w*$''',
+    '''^\$\(''',
+    '''^\{\{.*\}\}$''',
+    '''^<[^>]*>$''',
+    '''^[*•x.]+$''',
+    '''^\[[A-Z0-9_-]+(?:[:-][0-9a-f]+|-\d+)?\]$''',
+    '''(?i)^(?:changeme|change_me|null|nil|none|true|false|undefined|required|optional|redacted|example|placeholder|hidden|masked|empty)$''',
+    '''^(?:/|~/|\./|\.\./)''',
+]
+
+[[rules]]
+id = "portainer-api-token"
+description = "Portainer API access token (ptr_ prefix)."
+regex = '''\b(ptr_[A-Za-z0-9+/_-]{24,}={0,2})'''
+entropy = 3.5
+keywords = ["ptr_"]
+[[rules.allowlists]]
+description = "snake_case identifiers such as ptr_to_buffer are code, not tokens"
+regexes = ['''^ptr_[a-z_]+$''']
