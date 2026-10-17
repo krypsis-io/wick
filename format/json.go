@@ -30,6 +30,19 @@ func redactString(val string, d *detect.Detector, replacer redact.Replacer, find
 	return val, false
 }
 
+// detectContext is synthetic text placed around a value so that rules which
+// need the key name (or the surrounding quotes) can match. Only matches that
+// fall entirely within the value are kept.
+type detectContext struct{ prefix, suffix string }
+
+// keyContexts returns the contexts for a value under key. The parser has
+// already stripped the value's quotes, so the value is tried both bare and
+// re-quoted: bare for rules that stop at whitespace, quoted so a value with
+// spaces (e.g. a passphrase) is captured whole.
+func keyContexts(key string) []detectContext {
+	return []detectContext{{key + "=", ""}, {key + `="`, `"`}}
+}
+
 // redactKeyedString redacts a scalar value that appears under the mapping key
 // key. The key is prepended as detection context on the first line so that
 // keyword-anchored rules (e.g. aws_secret_access_key, whose regex requires the
@@ -39,43 +52,41 @@ func redactKeyedString(key, val string, d *detect.Detector, replacer redact.Repl
 	if key == "" {
 		return redactString(val, d, replacer, findings)
 	}
-	return redactInContext([]string{key + "="}, val, d, replacer, findings)
+	return redactInContext(keyContexts(key), val, d, replacer, findings)
 }
 
 // redactPairValue redacts the value half of a {name: ..., value: ...} pair
 // (Portainer, Kubernetes env, ECS, CloudFormation tags). The sibling name is
-// the real key, so it is used as detection context instead of "value": once as
-// NAME=value for keyword-anchored rules, and once as the JSON pair itself so
-// the name-value-secret rule can match regardless of the value's entropy.
+// the real key, so it is used as detection context instead of "value": as
+// NAME=value for keyword-anchored rules, and as the JSON pair itself so the
+// name-value-secret rule can match regardless of the value's entropy.
 func redactPairValue(name, val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
-	prefixes := []string{name + "="}
+	contexts := keyContexts(name)
 	if !strings.ContainsAny(name, `"\`) {
-		prefixes = append(prefixes, `{"name":"`+name+`","value":"`)
+		contexts = append(contexts, detectContext{`{"name":"` + name + `","value":"`, `"`})
 	}
-	return redactInContext(prefixes, val, d, replacer, findings)
+	return redactInContext(contexts, val, d, replacer, findings)
 }
 
-// redactInContext detects against each prefix+value on the first line of val,
-// keeping only matches that fall entirely within the value, remapped to
-// value-relative offsets. Findings from different prefixes that overlap one
-// already kept are dropped so a value is counted once. Later lines are
-// detected without context.
-func redactInContext(prefixes []string, val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
+// redactInContext detects against each context wrapped around the first line
+// of val, keeping only matches that fall entirely within the value, remapped
+// to value-relative offsets. Where findings from different contexts overlap,
+// the widest wins so a value is counted once and never partially redacted.
+// Later lines are detected without context.
+func redactInContext(contexts []detectContext, val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
 	lines := strings.Split(val, "\n")
 	changed := false
 	for i, line := range lines {
 		var found []detect.Finding
 		if i == 0 {
-			for _, prefix := range prefixes {
-				for _, f := range d.Detect(prefix + line) {
-					if f.Start < len(prefix) {
-						continue // match started inside the synthetic context; ignore it
+			for _, c := range contexts {
+				for _, f := range d.Detect(c.prefix + line + c.suffix) {
+					if f.Start < len(c.prefix) || f.End > len(c.prefix)+len(line) {
+						continue // match touches the synthetic context; ignore it
 					}
-					f.Start -= len(prefix)
-					f.End -= len(prefix)
-					if !overlapsAny(found, f) {
-						found = append(found, f)
-					}
+					f.Start -= len(c.prefix)
+					f.End -= len(c.prefix)
+					found = mergeWidest(found, f)
 				}
 			}
 		} else {
@@ -96,13 +107,20 @@ func redactInContext(prefixes []string, val string, d *detect.Detector, replacer
 	return val, false
 }
 
-func overlapsAny(kept []detect.Finding, f detect.Finding) bool {
+// mergeWidest adds f to kept unless an overlapping finding already covers at
+// least as much; a wider f replaces the narrower findings it overlaps.
+func mergeWidest(kept []detect.Finding, f detect.Finding) []detect.Finding {
+	out := make([]detect.Finding, 0, len(kept)+1)
 	for _, k := range kept {
 		if f.Start < k.End && k.Start < f.End {
-			return true
+			if k.End-k.Start >= f.End-f.Start {
+				return kept
+			}
+			continue
 		}
+		out = append(out, k)
 	}
-	return false
+	return append(out, f)
 }
 
 // pairName returns the sibling name of a {name, value} style object, given a

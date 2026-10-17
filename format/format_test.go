@@ -175,3 +175,29 @@ func TestProcessYAML_NameValuePairs(t *testing.T) {
 		t.Errorf("non-secret pair should be untouched: %s", out)
 	}
 }
+
+// A passphrase with spaces must be redacted whole: the parser strips quotes,
+// so a bare key=value context alone would capture only the first word.
+func TestProcessStructured_PassphraseWithSpaces(t *testing.T) {
+	d := newDetector(t)
+	tests := []struct {
+		name string
+		run  func(string, *detect.Detector, redact.Replacer) (string, []detect.Finding)
+		in   string
+	}{
+		{"json pair", ProcessJSON, `{"name":"DB_PASSWORD","value":"correct horse battery"}`},
+		{"json key", ProcessJSON, `{"db_password":"correct horse battery"}`},
+		{"yaml key", ProcessYAML, "password: correct horse battery\nuser: x\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, findings := tt.run(tt.in, d, redact.Redacted)
+			if strings.Contains(out, "horse") || strings.Contains(out, "battery") {
+				t.Errorf("passphrase partially leaked: %s", out)
+			}
+			if len(findings) != 1 {
+				t.Errorf("expected 1 finding, got %d: %+v", len(findings), findings)
+			}
+		})
+	}
+}

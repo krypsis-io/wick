@@ -30,13 +30,24 @@ func randB64(t *testing.T, n int) string {
 	return strings.NewReplacer("+", "", "/", "", "=", "").Replace(base64.StdEncoding.EncodeToString(b))
 }
 
+// randAlnum returns exactly n alphanumeric characters. Stripping +/= from
+// base64 shortens it unpredictably, so draw until there are enough.
+func randAlnum(t *testing.T, n int) string {
+	t.Helper()
+	var sb strings.Builder
+	for sb.Len() < n {
+		sb.WriteString(randB64(t, n))
+	}
+	return sb.String()[:n]
+}
+
 // TestDetectionGaps reproduces the cases from the 0.3.1 detection-gaps report:
 // secrets in Portainer-style {"name","value"} env JSON, low-entropy passwords,
 // and Portainer ptr_ tokens all leaked through. Every secret must be gone from
 // the output, in both a mixed log and as standalone input.
 func TestDetectionGaps(t *testing.T) {
 	r1, r2, r3 := randHex(t, 16), randHex(t, 20), randB64(t, 24)
-	gh := "ghp_" + randB64(t, 30)[:36]
+	gh := "ghp_" + randAlnum(t, 36)
 
 	cases := []struct {
 		name   string
