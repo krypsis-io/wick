@@ -37,14 +37,27 @@ func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, fin
 			walkYAML(child, d, replacer, findings)
 		}
 	case yaml.MappingNode:
+		name, isPair := pairName(func(k string) (string, bool) {
+			for i := 0; i+1 < len(node.Content); i += 2 {
+				if node.Content[i].Value == k && isStringScalar(node.Content[i+1]) {
+					return node.Content[i+1].Value, true
+				}
+			}
+			return "", false
+		})
 		// Content alternates: key, value, key, value...
 		for i := 0; i+1 < len(node.Content); i += 2 {
 			keyNode := node.Content[i]
 			valNode := node.Content[i+1]
 			// Don't redact keys, only values. For scalar string values, pass the
 			// key as detection context so keyword-anchored rules match.
-			if valNode.Kind == yaml.ScalarNode && (valNode.Tag == "!!str" || valNode.Tag == "") {
-				if result, changed := redactKeyedString(keyNode.Value, valNode.Value, d, replacer, findings); changed {
+			if isStringScalar(valNode) {
+				redactFn := redactKeyedString
+				ctxKey := keyNode.Value
+				if isPair && isPairValueKey(keyNode.Value) {
+					redactFn, ctxKey = redactPairValue, name
+				}
+				if result, changed := redactFn(ctxKey, valNode.Value, d, replacer, findings); changed {
 					valNode.Value = result
 				}
 				continue
@@ -62,4 +75,8 @@ func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, fin
 			}
 		}
 	}
+}
+
+func isStringScalar(n *yaml.Node) bool {
+	return n.Kind == yaml.ScalarNode && (n.Tag == "!!str" || n.Tag == "")
 }

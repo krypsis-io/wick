@@ -12,7 +12,7 @@ Logs, configs, and stack traces routinely contain API keys, internal hostnames, 
 
 ![Wick demo](assets/demo.gif)
 
-- Detects secrets with bundled Gitleaks-derived rules, plus common PII (emails, IP addresses, US phone numbers, US SSNs)
+- Detects secrets with bundled Gitleaks-derived rules plus wick's own log-focused rules (low-entropy passwords, `{"name","value"}` env pairs from Portainer/Kubernetes/ECS, Portainer `ptr_` tokens), plus common PII (emails, IP addresses, US phone numbers, US SSNs)
 - Preserves structure for JSON, YAML, and `.env` input
 - Extensible with custom patterns, allowlists, and blocklists
 - Reversible mode: share redacted text, then restore the originals from an encrypted token map
@@ -70,7 +70,8 @@ Exit code `1` means Wick found and redacted something; `0` means the input was c
 ```bash
 wick app.log --format json    # sanitized text plus machine-readable findings
 wick app.log --summary        # count of redactions, printed to stderr
-wick app.log --report         # per-finding detail (rule ID, location), printed to stderr
+wick app.log --report         # per-finding detail (rule ID, location, masked preview), printed to stderr
+wick app.log --report-unsafe  # same, but prints the raw matched values. Exposes secrets on stderr
 wick app.log --style stars    # replacement style: redacted (default), stars, hash, custom="..."
 ```
 

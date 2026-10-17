@@ -38,8 +38,8 @@ We use [Conventional Commits](https://www.conventionalcommits.org/) for automati
 
 Adding new detection patterns is the easiest way to contribute:
 
-- Secret patterns: Add to `internal/detect/patterns/gitleaks.toml` (Gitleaks-compatible format)
-- PII patterns: Add to `internal/detect/pii.go`
+- Secret patterns: Add to `detect/patterns/wick.toml` (Gitleaks-compatible format). `detect/patterns/gitleaks.toml` is generated upstream; don't edit it by hand
+- PII patterns: Add to `detect/pii.go`
 - Include tests for any new patterns
 
 ## Development

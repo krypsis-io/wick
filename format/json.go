@@ -30,6 +30,19 @@ func redactString(val string, d *detect.Detector, replacer redact.Replacer, find
 	return val, false
 }
 
+// detectContext is synthetic text placed around a value so that rules which
+// need the key name (or the surrounding quotes) can match. Only matches that
+// fall entirely within the value are kept.
+type detectContext struct{ prefix, suffix string }
+
+// keyContexts returns the contexts for a value under key. The parser has
+// already stripped the value's quotes, so the value is tried both bare and
+// re-quoted: bare for rules that stop at whitespace, quoted so a value with
+// spaces (e.g. a passphrase) is captured whole.
+func keyContexts(key string) []detectContext {
+	return []detectContext{{key + "=", ""}, {key + `="`, `"`}}
+}
+
 // redactKeyedString redacts a scalar value that appears under the mapping key
 // key. The key is prepended as detection context on the first line so that
 // keyword-anchored rules (e.g. aws_secret_access_key, whose regex requires the
@@ -39,22 +52,42 @@ func redactKeyedString(key, val string, d *detect.Detector, replacer redact.Repl
 	if key == "" {
 		return redactString(val, d, replacer, findings)
 	}
+	return redactInContext(keyContexts(key), val, d, replacer, findings)
+}
 
-	prefix := key + "="
+// redactPairValue redacts the value half of a {name: ..., value: ...} pair
+// (Portainer, Kubernetes env, ECS, CloudFormation tags). The sibling name is
+// the real key, so it is used as detection context instead of "value": as
+// NAME=value for keyword-anchored rules, and as the JSON pair itself so the
+// name-value-secret rule can match regardless of the value's entropy.
+func redactPairValue(name, val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
+	contexts := keyContexts(name)
+	if !strings.ContainsAny(name, `"\`) {
+		contexts = append(contexts, detectContext{`{"name":"` + name + `","value":"`, `"`})
+	}
+	return redactInContext(contexts, val, d, replacer, findings)
+}
+
+// redactInContext detects against each context wrapped around the first line
+// of val, keeping only matches that fall entirely within the value, remapped
+// to value-relative offsets. Where findings from different contexts overlap,
+// the widest wins so a value is counted once and never partially redacted.
+// Later lines are detected without context.
+func redactInContext(contexts []detectContext, val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
 	lines := strings.Split(val, "\n")
 	changed := false
 	for i, line := range lines {
 		var found []detect.Finding
 		if i == 0 {
-			// Detect against "key=value" and keep only matches that fall entirely
-			// within the value portion, remapped to value-relative offsets.
-			for _, f := range d.Detect(prefix + line) {
-				if f.Start < len(prefix) {
-					continue // match started inside the synthetic key; ignore it
+			for _, c := range contexts {
+				for _, f := range d.Detect(c.prefix + line + c.suffix) {
+					if f.Start < len(c.prefix) || f.End > len(c.prefix)+len(line) {
+						continue // match touches the synthetic context; ignore it
+					}
+					f.Start -= len(c.prefix)
+					f.End -= len(c.prefix)
+					found = mergeWidest(found, f)
 				}
-				f.Start -= len(prefix)
-				f.End -= len(prefix)
-				found = append(found, f)
 			}
 		} else {
 			found = d.Detect(line)
@@ -72,6 +105,44 @@ func redactKeyedString(key, val string, d *detect.Detector, replacer redact.Repl
 		return strings.Join(lines, "\n"), true
 	}
 	return val, false
+}
+
+// mergeWidest adds f to kept unless an overlapping finding already covers at
+// least as much; a wider f replaces the narrower findings it overlaps.
+func mergeWidest(kept []detect.Finding, f detect.Finding) []detect.Finding {
+	out := make([]detect.Finding, 0, len(kept)+1)
+	for _, k := range kept {
+		if f.Start < k.End && k.Start < f.End {
+			if k.End-k.Start >= f.End-f.Start {
+				return kept
+			}
+			continue
+		}
+		out = append(out, k)
+	}
+	return append(out, f)
+}
+
+// pairName returns the sibling name of a {name, value} style object, given a
+// lookup of the object's string fields. It reports false when the object has
+// no value field or no name/key field.
+func pairName(field func(string) (string, bool)) (string, bool) {
+	if _, ok := field("value"); !ok {
+		if _, ok := field("Value"); !ok {
+			return "", false
+		}
+	}
+	for _, k := range []string{"name", "Name", "key", "Key"} {
+		if n, ok := field(k); ok && n != "" {
+			return n, true
+		}
+	}
+	return "", false
+}
+
+// isPairValueKey reports whether k is the value field of a {name, value} pair.
+func isPairValueKey(k string) bool {
+	return k == "value" || k == "Value"
 }
 
 // ProcessJSON parses JSON, redacts string values, and preserves structure.
@@ -107,11 +178,20 @@ func walkJSON(v any, d *detect.Detector, replacer redact.Replacer, findings *[]d
 	switch val := v.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(val))
+		name, isPair := pairName(func(k string) (string, bool) {
+			s, ok := val[k].(string)
+			return s, ok
+		})
 		for k, child := range val {
 			// Redact string values with their key as detection context so
 			// keyword-anchored rules match; recurse into everything else.
 			if s, ok := child.(string); ok {
-				if red, changed := redactKeyedString(k, s, d, replacer, findings); changed {
+				redactFn := redactKeyedString
+				ctxKey := k
+				if isPair && isPairValueKey(k) {
+					redactFn, ctxKey = redactPairValue, name
+				}
+				if red, changed := redactFn(ctxKey, s, d, replacer, findings); changed {
 					result[k] = red
 				} else {
 					result[k] = s
