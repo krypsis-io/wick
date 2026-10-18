@@ -129,6 +129,9 @@ func run(_ *cobra.Command, args []string) error {
 	}
 
 	foundCount, err := executeRunMode(opts, detector, replacer, outputFormat)
+	// Print before the error check: a later file can fail after earlier ones
+	// were already redacted and written out.
+	output.Notice(os.Stderr, foundCount > 0)
 	if err != nil {
 		return err
 	}
@@ -192,6 +195,7 @@ func runTokenize(cfg *config.Config, files []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wick: token map written to %s\n", flagTokenFile)
+	output.Notice(os.Stderr, redacted != input)
 
 	fmt.Print(redacted)
 	return nil

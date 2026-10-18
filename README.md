@@ -140,6 +140,8 @@ Config is loaded from `~/.config/wick/config.yaml` (global), then the nearest `.
 
 Wick is a last-mile filter for text you are about to share. It is not a secrets manager and does not replace proper secret storage, rotation, or leak prevention.
 
+Detection is best-effort. Wick finds what its rules describe: the bundled gitleaks-derived secret rules, wick's own rules for passwords and keyed secrets, and the email, IP, phone, and SSN detectors. It will miss formats it has no rule for, such as internal token schemes, ticket IDs, and hostnames. Add those with `patterns` or `blocklist` in `.wick.yaml`, and review the output before you share it. When anything is redacted, wick prints a reminder to stderr; stdout stays clean for pipes.
+
 ## License
 
 [AGPL-3.0](LICENSE)
