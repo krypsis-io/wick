@@ -11,8 +11,8 @@ import (
 // redactString detects and redacts secrets/PII in a string value line by line,
 // so that multi-line strings have correct byte offsets for redaction.
 func redactString(val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
+	val, changed := redactMultilineInto(val, d, replacer, findings)
 	lines := strings.Split(val, "\n")
-	changed := false
 	for i, line := range lines {
 		found := d.Detect(line)
 		if len(found) > 0 {
@@ -28,6 +28,20 @@ func redactString(val string, d *detect.Detector, replacer redact.Replacer, find
 		return strings.Join(lines, "\n"), true
 	}
 	return val, false
+}
+
+// redactMultilineInto runs the multiline rules over a whole string value
+// before it is split into lines, so a PEM block stored as a YAML block scalar,
+// a JSON string, or an escaped JSON document inside a string (such as
+// kubectl's last-applied-configuration annotation) is still caught. The
+// line-by-line pass that follows sees the already-redacted value.
+func redactMultilineInto(val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
+	red, found := redactMultiline(val, d, replacer)
+	if len(found) == 0 {
+		return val, false
+	}
+	*findings = append(*findings, found...)
+	return red, true
 }
 
 // detectContext is synthetic text placed around a value so that rules which
@@ -74,8 +88,8 @@ func redactPairValue(name, val string, d *detect.Detector, replacer redact.Repla
 // the widest wins so a value is counted once and never partially redacted.
 // Later lines are detected without context.
 func redactInContext(contexts []detectContext, val string, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) (string, bool) {
+	val, changed := redactMultilineInto(val, d, replacer, findings)
 	lines := strings.Split(val, "\n")
-	changed := false
 	for i, line := range lines {
 		var found []detect.Finding
 		if i == 0 {

@@ -201,3 +201,26 @@ func TestProcessStructured_PassphraseWithSpaces(t *testing.T) {
 		})
 	}
 }
+
+func TestRedactMultiline_EndClampedToMatch(t *testing.T) {
+	d := newDetector(t)
+	// An escaped PEM inside a one-line string ends before the line does; the
+	// finding must not claim the trailing text.
+	body := strings.Repeat("QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo", 3)
+	pem := `-----BEGIN RSA PRIVATE KEY-----\n` + body + `\n-----END RSA PRIVATE KEY-----`
+	input := `key="` + pem + `" trailing text`
+	_, found := redactMultiline(input, d, redact.Redacted)
+	if len(found) == 0 {
+		t.Fatal("expected a private-key finding")
+	}
+	for _, f := range found {
+		if f.RuleID != "private-key" {
+			continue
+		}
+		if got := input[f.Start:f.End]; got != pem {
+			t.Errorf("finding span = %q, want the PEM only", got)
+		}
+		return
+	}
+	t.Fatalf("no private-key finding in %+v", found)
+}

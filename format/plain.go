@@ -13,26 +13,8 @@ func ProcessPlain(input string, detector *detect.Detector, replacer redact.Repla
 
 	// First pass: multiline rules against the full input (e.g. PEM private key blocks).
 	// These are applied before line-by-line processing so their byte offsets remain valid.
-	multiFindings := detector.DetectMultiline(input)
-	working := input
-	if len(multiFindings) > 0 {
-		working = redact.Redact(input, multiFindings, replacer)
-		// Normalize multiline findings from absolute input offsets to per-line relative
-		// offsets so all entries in allFindings share the same coordinate semantics as
-		// the per-line findings appended below. End is clamped to the end of the
-		// starting line because the match may span multiple lines.
-		for _, f := range multiFindings {
-			lineStart := lineStartOffset(input, f.Line)
-			absStart := f.Start
-			f.Start = absStart - lineStart
-			if nl := strings.Index(input[absStart:], "\n"); nl >= 0 {
-				f.End = f.Start + nl
-			} else {
-				f.End = len(input) - lineStart
-			}
-			allFindings = append(allFindings, f)
-		}
-	}
+	working, multiFindings := redactMultiline(input, detector, replacer)
+	allFindings = append(allFindings, multiFindings...)
 
 	// Second pass: line-by-line detection on the (possibly pre-redacted) working buffer.
 	// Line numbers here reflect working, not the original input — multiline redactions
@@ -51,6 +33,31 @@ func ProcessPlain(input string, detector *detect.Detector, replacer redact.Repla
 	}
 
 	return strings.Join(result, "\n"), allFindings
+}
+
+// redactMultiline runs the multiline rules (e.g. PEM private key blocks)
+// against the whole of input and redacts their matches. The returned findings
+// use the same per-line coordinates as Detect: Start is relative to the start
+// of the finding's line, and End is the end of the match, clamped to the end
+// of that line when the match spans several lines.
+func redactMultiline(input string, detector *detect.Detector, replacer redact.Replacer) (string, []detect.Finding) {
+	found := detector.DetectMultiline(input)
+	if len(found) == 0 {
+		return input, nil
+	}
+	working := redact.Redact(input, found, replacer)
+	for i, f := range found {
+		lineStart := lineStartOffset(input, f.Line)
+		absStart, absEnd := f.Start, f.End
+		lineEnd := len(input)
+		if nl := strings.Index(input[absStart:], "\n"); nl >= 0 {
+			lineEnd = absStart + nl
+		}
+		f.Start = absStart - lineStart
+		f.End = min(absEnd, lineEnd) - lineStart
+		found[i] = f
+	}
+	return working, found
 }
 
 // lineStartOffset returns the byte offset of the start of the given 1-based line in s.
