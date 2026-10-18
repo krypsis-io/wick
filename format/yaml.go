@@ -82,7 +82,7 @@ func hasProseKey(n *yaml.Node) bool {
 func hasSecret(n *yaml.Node) bool {
 	if n.Kind == yaml.MappingNode {
 		for i := 0; i+1 < len(n.Content); i += 2 {
-			if n.Content[i].Value == "kind" && n.Content[i+1].Value == "Secret" {
+			if n.Content[i].Value == "kind" && resolveAlias(n.Content[i+1]).Value == "Secret" {
 				return true
 			}
 		}
@@ -127,8 +127,8 @@ func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, fin
 		})
 		kind := ""
 		for i := 0; i+1 < len(node.Content); i += 2 {
-			if node.Content[i].Value == "kind" && isStringScalar(node.Content[i+1]) {
-				kind = node.Content[i+1].Value
+			if v := resolveAlias(node.Content[i+1]); node.Content[i].Value == "kind" && isStringScalar(v) {
+				kind = v.Value
 			}
 		}
 		// Content alternates: key, value, key, value...

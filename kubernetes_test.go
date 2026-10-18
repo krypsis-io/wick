@@ -142,6 +142,8 @@ func TestKubernetesSecretPayload(t *testing.T) {
 		{"list of secrets", list},
 		{"values given as yaml aliases", aliased},
 		{"secret after a document with a spaced key", "display name: Alice\n---\n" + secretYAML},
+		{"kind given as a yaml alias", "apiVersion: v1\nmetadata:\n  name: ledger-creds\n  labels:\n    type: &k Secret\nkind: *k\n" +
+			"data:\n  DATABASE_URL: " + encoded + "\nstringData:\n  PIN: " + pin + "\n  config.json: '" + config + "'\n"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			out, _, err := wick.Redact(c.input)
