@@ -129,11 +129,13 @@ func run(_ *cobra.Command, args []string) error {
 	}
 
 	foundCount, err := executeRunMode(opts, detector, replacer, outputFormat)
+	// Print before the error check: a later file can fail after earlier ones
+	// were already redacted and written out.
+	output.Notice(os.Stderr, foundCount > 0)
 	if err != nil {
 		return err
 	}
 
-	output.Notice(os.Stderr, foundCount > 0)
 	if foundCount > 0 {
 		return errFindingsPresent
 	}
