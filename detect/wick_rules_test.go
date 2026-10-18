@@ -81,6 +81,7 @@ func TestWickRules(t *testing.T) {
 		{"https token", `git clone https://x-access-token:a8f3k2m9x7q1z4@github.com/org/repo`, "url-credentials", "a8f3k2m9x7q1z4"},
 		{"url in json", `{"dsn":"mysql://app:Zq8tWv3nRb@10.0.0.5:3306/app"}`, "url-credentials", "Zq8tWv3nRb"},
 		{"ipv6 host", `amqp://guest:Rb7Kp2Lx9@[::1]:5672/`, "url-credentials", "Rb7Kp2Lx9"},
+		{"one-letter scheme", `x://user:hunter2@db.example.com`, "url-credentials", "hunter2"},
 		{"user without password", `ssh://git@github.com/org/repo.git`, "", ""},
 		{"host and port", `https://example.com:8443/path@v2`, "", ""},
 		{"url env reference", `postgres://app:${DB_PASSWORD}@db:5432/app`, "", ""},

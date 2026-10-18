@@ -14,10 +14,10 @@ type piiPattern struct {
 	InContext func(before string) bool
 }
 
-// urlUserinfoPrefix matches text that ends inside the userinfo of a URL
-// (postgres://user:pa or postgres://), so a match starting there is part of
-// user:pass@host rather than an email address.
-var urlUserinfoPrefix = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^\s/?#@:]*(?::[^\s/?#@]*)?$`)
+// urlUserinfoPrefix matches text that ends inside the password of a URL
+// (postgres://user: or postgres://user:pa), so a match starting there is
+// pass@host rather than an email address.
+var urlUserinfoPrefix = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^\s/?#@:]*:[^\s/?#@]*$`)
 
 var piiPatterns = []piiPattern{
 	{

@@ -295,7 +295,7 @@ func TestDetector_PII_EmailNotURLUserinfo(t *testing.T) {
 	}{
 		{`postgres://ledger:bFvY8Csvm0hTLA1m@db.payments.svc:5432/ledger`, ""},
 		{`postgres://ledger:p!w0rd.x@db.payments.svc:5432/ledger`, ""},
-		{`https://alice@git.example.com/org/repo`, ""},
+		{`https://jane.doe@company.com/`, "jane.doe@company.com"},
 		{`https://example.com/contact?to=admin@acme.com`, "admin@acme.com"},
 		{`mailto:admin@acme.com`, "admin@acme.com"},
 	}

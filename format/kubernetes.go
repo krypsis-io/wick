@@ -50,15 +50,32 @@ func redactLastApplied(val string, d *detect.Detector, replacer redact.Replacer,
 			if !ok {
 				continue
 			}
-			enc := jsonStringContent(s)
-			f, ok := d.KubernetesSecretValue(enc)
-			if !ok || !strings.Contains(val, `"`+enc+`"`) {
-				continue
+			for _, enc := range jsonStringForms(s) {
+				f, ok := d.KubernetesSecretValue(enc)
+				if !ok || !strings.Contains(val, `"`+enc+`"`) {
+					continue
+				}
+				*findings = append(*findings, f)
+				val = strings.ReplaceAll(val, `"`+enc+`"`, `"`+replacer.Replace(enc, f)+`"`)
+				changed = true
 			}
-			*findings = append(*findings, f)
-			val = strings.ReplaceAll(val, `"`+enc+`"`, `"`+replacer.Replace(enc, f)+`"`)
-			changed = true
 		}
 	}
 	return val, changed
+}
+
+// jsonStringForms returns the ways s can appear between the quotes of a JSON
+// string: as written by an encoder with HTML escaping off, and as written by
+// encoding/json's default (kubectl), which writes &, < and > as \u0026,
+// \u003c and \u003e.
+func jsonStringForms(s string) []string {
+	plain := jsonStringContent(s)
+	b, err := json.Marshal(s)
+	if err != nil {
+		return []string{plain}
+	}
+	if escaped := string(b[1 : len(b)-1]); escaped != plain {
+		return []string{plain, escaped}
+	}
+	return []string{plain}
 }

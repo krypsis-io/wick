@@ -80,7 +80,7 @@ regexes = [
 [[rules]]
 id = "url-credentials"
 description = "Password in the userinfo of a URL (postgres://user:PASSWORD@host). Only the password is captured, so the scheme, user, host and path stay readable."
-regex = '''(?i)\b[a-z][a-z0-9+.-]{1,30}://[^\s:/?#@"'\x60]{0,128}:([^\s/?#@"'\x60]{1,256})@[a-z0-9\[][^\s/?#@"'\x60]{0,7}'''
+regex = '''(?i)\b[a-z][a-z0-9+.-]{0,30}://[^\s:/?#@"'\x60]{0,128}:([^\s/?#@"'\x60]{1,256})@[a-z0-9\[][^\s/?#@"'\x60]{0,7}'''
 secretGroup = 1
 keywords = ["://"]
 [[rules.allowlists]]

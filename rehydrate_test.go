@@ -40,14 +40,14 @@ func TestRehydrate_StructuredRoundTrip(t *testing.T) {
 	multiYAML := "kind: ConfigMap\ndata:\n  host: db.internal\n---\n" + quotedYAML
 	secretJSON, err := json.Marshal(map[string]any{
 		"apiVersion": "v1", "kind": "Secret",
-		"stringData": map[string]string{"config": pass + "\n" + pem},
+		"stringData": map[string]string{"config": pass + "&<x>\n" + pem},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	secretYAML := "apiVersion: v1\nkind: Secret\nmetadata:\n  annotations:\n" +
 		"    kubectl.kubernetes.io/last-applied-configuration: |\n      " + string(secretJSON) + "\n" +
-		"stringData:\n  config: |\n    " + strings.ReplaceAll(pass+"\n"+pem, "\n", "\n    ") + "\n"
+		"stringData:\n  config: |\n    " + strings.ReplaceAll(pass+"&<x>\n"+pem, "\n", "\n    ") + "\n"
 	unquote := func(s string) string { return regexp.MustCompile(`'(\[[A-Z0-9-]+\])'`).ReplaceAllString(s, "$1") }
 
 	cases := []struct {

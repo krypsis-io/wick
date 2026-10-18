@@ -110,8 +110,10 @@ func TestKubernetesSecretPayload(t *testing.T) {
 	dsn := "postgres://ledger:" + randAlnum(t, 16) + "@db:5432/ledger"
 	encoded := base64.StdEncoding.EncodeToString([]byte(dsn))
 	pin := "482913"
-	config := `{"auth":"` + randAlnum(t, 24) + `"}`
-	secrets := []string{encoded, pin, config, dsn}
+	auth := randAlnum(t, 24)
+	// The & is written as \u0026 in kubectl's JSON, the < and > likewise.
+	config := `{"auth":"` + auth + `","dsn":"db?sslmode=require&x=<1>"}`
+	secrets := []string{encoded, pin, auth}
 
 	secretJSON, err := json.Marshal(map[string]any{
 		"apiVersion": "v1",
