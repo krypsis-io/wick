@@ -115,8 +115,8 @@ func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, fin
 			keyNode := node.Content[i]
 			valNode := node.Content[i+1]
 			key := keyNode.Value
-			if valNode.Kind == yaml.MappingNode && isSecretPayload(kind, key) {
-				redactSecretPayloadYAML(valNode, d, replacer, findings)
+			if payload := resolveAlias(valNode); payload.Kind == yaml.MappingNode && isSecretPayload(kind, key) {
+				redactSecretPayloadYAML(payload, d, replacer, findings)
 				continue
 			}
 			// A key can hold a secret too, e.g. a token used as a map key.
@@ -160,7 +160,7 @@ func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, fin
 
 func redactSecretPayloadYAML(payload *yaml.Node, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) {
 	for i := 0; i+1 < len(payload.Content); i += 2 {
-		valNode := payload.Content[i+1]
+		valNode := resolveAlias(payload.Content[i+1])
 		if valNode.Kind != yaml.ScalarNode {
 			walkYAML(valNode, d, replacer, findings)
 			continue
@@ -171,6 +171,16 @@ func redactSecretPayloadYAML(payload *yaml.Node, d *detect.Detector, replacer re
 			valNode.Value, valNode.Tag = result, "!!str"
 		}
 	}
+}
+
+// resolveAlias returns the node an alias refers to. A Secret value given as
+// an alias is redacted at its anchor, so the value appears nowhere in the
+// output, including under the anchor's own key.
+func resolveAlias(n *yaml.Node) *yaml.Node {
+	for n.Kind == yaml.AliasNode && n.Alias != nil {
+		n = n.Alias
+	}
+	return n
 }
 
 func isStringScalar(n *yaml.Node) bool {

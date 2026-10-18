@@ -129,12 +129,16 @@ func TestKubernetesSecretPayload(t *testing.T) {
 		"    kubectl.kubernetes.io/last-applied-configuration: |\n      " + string(secretJSON) + "\n" +
 		"data:\n  DATABASE_URL: " + encoded + "\n"
 	list := `{"apiVersion":"v1","kind":"List","items":[` + string(secretJSON) + `]}`
+	aliased := "apiVersion: v1\nkind: Secret\nmetadata:\n  name: ledger-creds\n  labels:\n    pin: &pin " + pin + "\n" +
+		"creds: &creds\n  DATABASE_URL: " + encoded + "\n  config.json: '" + config + "'\n" +
+		"data: *creds\nstringData:\n  PIN: *pin\n"
 
 	for _, c := range []struct{ name, input string }{
 		{"secret json", string(secretJSON)},
 		{"secret yaml", secretYAML},
 		{"last-applied-configuration", appliedYAML},
 		{"list of secrets", list},
+		{"values given as yaml aliases", aliased},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			out, _, err := wick.Redact(c.input)
