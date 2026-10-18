@@ -5,7 +5,7 @@ Gitleaks - Secret Detection Patterns
 ================================================================================
 
 Source: https://github.com/gitleaks/gitleaks
-File:   internal/detect/patterns/gitleaks.toml
+File:   detect/patterns/gitleaks.toml
 License: MIT
 
 Copyright (c) 2019 Zachary Rice
