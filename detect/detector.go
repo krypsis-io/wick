@@ -12,7 +12,7 @@ type Detector struct {
 	secretRules    []SecretRule
 	customPatterns []compiledCustom
 	allowlist      []compiledAllowlistEntry
-	disabledPII    map[string]bool
+	disabled       map[string]bool
 }
 
 // New creates a Detector with the embedded Gitleaks patterns and built-in PII rules.
@@ -57,12 +57,13 @@ func (d *Detector) DisableRules(ids []string) {
 	}
 	d.secretRules = kept
 
-	// Also track disabled PII rule IDs (email, ipv4, etc.).
+	// Also track IDs of rules that are not regex rules (email, ipv4,
+	// kubernetes-secret, ...).
 	for id := range disabled {
-		if d.disabledPII == nil {
-			d.disabledPII = make(map[string]bool)
+		if d.disabled == nil {
+			d.disabled = make(map[string]bool)
 		}
-		d.disabledPII[id] = true
+		d.disabled[id] = true
 	}
 }
 
@@ -84,7 +85,7 @@ func (d *Detector) Detect(input string) []Finding {
 	for i, line := range lines {
 		lineNum := i + 1
 		all = append(all, matchSecretRules(d.secretRules, line, lineNum)...)
-		all = append(all, matchPII(line, lineNum, d.disabledPII)...)
+		all = append(all, matchPII(line, lineNum, d.disabled)...)
 		all = append(all, matchCustom(d.customPatterns, line, lineNum)...)
 	}
 	return dedupeIdenticalSpans(d.filterAllowed(all))

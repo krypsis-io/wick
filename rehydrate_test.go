@@ -38,6 +38,16 @@ func TestRehydrate_StructuredRoundTrip(t *testing.T) {
 	blockYAML := "env:\n- name: TLS_PRIVATE_KEY\n  value: |\n" + indented + "\n- name: DB_HOST\n  value: db.internal\n"
 	quotedYAML := "db:\n  host: db.internal\n  password: '" + strings.ReplaceAll(pass, "'", "''") + "'\n"
 	multiYAML := "kind: ConfigMap\ndata:\n  host: db.internal\n---\n" + quotedYAML
+	secretJSON, err := json.Marshal(map[string]any{
+		"apiVersion": "v1", "kind": "Secret",
+		"stringData": map[string]string{"config": pass + "\n" + pem},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretYAML := "apiVersion: v1\nkind: Secret\nmetadata:\n  annotations:\n" +
+		"    kubectl.kubernetes.io/last-applied-configuration: |\n      " + string(secretJSON) + "\n" +
+		"stringData:\n  config: |\n    " + strings.ReplaceAll(pass+"\n"+pem, "\n", "\n    ") + "\n"
 	unquote := func(s string) string { return regexp.MustCompile(`'(\[[A-Z0-9-]+\])'`).ReplaceAllString(s, "$1") }
 
 	cases := []struct {
@@ -53,6 +63,8 @@ func TestRehydrate_StructuredRoundTrip(t *testing.T) {
 		{"yaml quoted value with special characters", quotedYAML, pass, decodeYAML, nil},
 		{"multi-document yaml", multiYAML, pass, decodeYAML, nil},
 		{"yaml token left unquoted", quotedYAML, pass, decodeYAML, unquote},
+		{"kubernetes secret json", string(secretJSON), pass, decodeJSON, nil},
+		{"kubernetes secret yaml with last-applied-configuration", secretYAML, pass, decodeYAML, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

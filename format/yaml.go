@@ -82,16 +82,39 @@ func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, fin
 			}
 			return "", false
 		})
+		kind := ""
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == "kind" && isStringScalar(node.Content[i+1]) {
+				kind = node.Content[i+1].Value
+			}
+		}
 		// Content alternates: key, value, key, value...
 		for i := 0; i+1 < len(node.Content); i += 2 {
 			keyNode := node.Content[i]
 			valNode := node.Content[i+1]
-			// Don't redact keys, only values. For scalar string values, pass the
-			// key as detection context so keyword-anchored rules match.
+			key := keyNode.Value
+			if valNode.Kind == yaml.MappingNode && isSecretPayload(kind, key) {
+				redactSecretPayloadYAML(valNode, d, replacer, findings)
+				continue
+			}
+			// Plain text that happens to parse as YAML (timestamped log
+			// lines, for one) can carry a secret in a key.
+			if isStringScalar(keyNode) {
+				if result, changed := redactString(keyNode.Value, d, replacer, findings); changed {
+					keyNode.Value = result
+				}
+			}
+			// For scalar string values, pass the key as detection context so
+			// keyword-anchored rules match.
 			if isStringScalar(valNode) {
+				if key == lastAppliedAnnotation {
+					if result, changed := redactLastApplied(valNode.Value, d, replacer, findings); changed {
+						valNode.Value = result
+					}
+				}
 				redactFn := redactKeyedString
-				ctxKey := keyNode.Value
-				if isPair && isPairValueKey(keyNode.Value) {
+				ctxKey := key
+				if isPair && isPairValueKey(key) {
 					redactFn, ctxKey = redactPairValue, name
 				}
 				if result, changed := redactFn(ctxKey, valNode.Value, d, replacer, findings); changed {
@@ -110,6 +133,21 @@ func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, fin
 			if result, changed := redactString(node.Value, d, replacer, findings); changed {
 				node.Value = result
 			}
+		}
+	}
+}
+
+func redactSecretPayloadYAML(payload *yaml.Node, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) {
+	for i := 0; i+1 < len(payload.Content); i += 2 {
+		valNode := payload.Content[i+1]
+		if valNode.Kind != yaml.ScalarNode {
+			walkYAML(valNode, d, replacer, findings)
+			continue
+		}
+		// Unquoted stringData values such as PIN: 1234 are ints to YAML but
+		// still secrets.
+		if result, changed := redactSecretPayloadValue(valNode.Value, d, replacer, findings); changed {
+			valNode.Value, valNode.Tag = result, "!!str"
 		}
 	}
 }
