@@ -18,8 +18,6 @@
 package wick
 
 import (
-	"strings"
-
 	"github.com/krypsis-io/wick/detect"
 	"github.com/krypsis-io/wick/format"
 	"github.com/krypsis-io/wick/redact"
@@ -151,14 +149,16 @@ func Dehydrate(input string, opts ...Option) (string, TokenMap, error) {
 }
 
 // Rehydrate restores original values in a previously dehydrated string using
-// the provided TokenMap. It performs a simple string replacement of each token
-// with its original value.
+// the provided TokenMap. Each token is replaced with its original value; for
+// JSON and YAML input the original is encoded for the document, so values
+// containing newlines or quotes (such as a PEM private key) still produce a
+// valid document.
 func Rehydrate(input string, tm TokenMap) (string, error) {
-	result := input
+	originals := make(map[string]string, len(tm.entries))
 	for token, entry := range tm.entries {
-		result = strings.ReplaceAll(result, token, entry.Original)
+		originals[token] = entry.Original
 	}
-	return result, nil
+	return format.Restore(input, originals), nil
 }
 
 func defaultConfig() *config {
