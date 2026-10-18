@@ -38,8 +38,8 @@ func ProcessPlain(input string, detector *detect.Detector, replacer redact.Repla
 // redactMultiline runs the multiline rules (e.g. PEM private key blocks)
 // against the whole of input and redacts their matches. The returned findings
 // use the same per-line coordinates as Detect: Start is relative to the start
-// of the finding's line, and End is clamped to the end of that line because
-// the match may span several lines.
+// of the finding's line, and End is the end of the match, clamped to the end
+// of that line when the match spans several lines.
 func redactMultiline(input string, detector *detect.Detector, replacer redact.Replacer) (string, []detect.Finding) {
 	found := detector.DetectMultiline(input)
 	if len(found) == 0 {
@@ -48,13 +48,13 @@ func redactMultiline(input string, detector *detect.Detector, replacer redact.Re
 	working := redact.Redact(input, found, replacer)
 	for i, f := range found {
 		lineStart := lineStartOffset(input, f.Line)
-		absStart := f.Start
-		f.Start = absStart - lineStart
+		absStart, absEnd := f.Start, f.End
+		lineEnd := len(input)
 		if nl := strings.Index(input[absStart:], "\n"); nl >= 0 {
-			f.End = f.Start + nl
-		} else {
-			f.End = len(input) - lineStart
+			lineEnd = absStart + nl
 		}
+		f.Start = absStart - lineStart
+		f.End = min(absEnd, lineEnd) - lineStart
 		found[i] = f
 	}
 	return working, found
