@@ -20,11 +20,11 @@ func fakePEM(t *testing.T) (string, []string) {
 	return pem, body
 }
 
-// TestKubernetesArtifacts covers the leaks found by the Gate 1 kind-cluster
-// test: a private key stored as a value in pod YAML / JSON (including the
-// escaped JSON in kubectl's last-applied-configuration annotation), and
-// column-aligned env values in `kubectl describe`. Diagnostic context such as
-// the database host must survive.
+// TestKubernetesArtifacts covers secrets in kubectl output: a private key
+// stored as a value in pod YAML / JSON (including the escaped JSON in
+// kubectl's last-applied-configuration annotation), and column-aligned env
+// values in `kubectl describe`. Diagnostic context such as the database host
+// must survive.
 func TestKubernetesArtifacts(t *testing.T) {
 	pem, body := fakePEM(t)
 	apiKey := randAlnum(t, 32)

@@ -224,3 +224,15 @@ func TestRedactMultiline_EndClampedToMatch(t *testing.T) {
 	}
 	t.Fatalf("no private-key finding in %+v", found)
 }
+
+func TestProcessYAML_MultiDocument(t *testing.T) {
+	d := newDetector(t)
+	input := "kind: ConfigMap\nmetadata:\n  name: one\n---\nkind: Secret\nmetadata:\n  name: two\nstringData:\n  password: hunter2horse\n"
+	out, _ := ProcessYAML(input, d, redact.Redacted)
+	if !strings.Contains(out, "name: two") {
+		t.Errorf("second document dropped:\n%s", out)
+	}
+	if strings.Contains(out, "hunter2horse") {
+		t.Errorf("secret in second document leaked:\n%s", out)
+	}
+}
