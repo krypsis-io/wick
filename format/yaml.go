@@ -31,7 +31,9 @@ func ProcessYAML(input string, detector *detect.Detector, replacer redact.Replac
 }
 
 // decodeYAMLStream decodes every document in input; yaml.Unmarshal would
-// keep only the first.
+// keep only the first. Input with an unquoted mapping key containing
+// whitespace is rejected: that is how log lines with ": " parse, and
+// re-encoding them would rewrite the text (long keys become "? key").
 func decodeYAMLStream(input string) ([]*yaml.Node, error) {
 	dec := yaml.NewDecoder(strings.NewReader(input))
 	var docs []*yaml.Node
@@ -44,12 +46,32 @@ func decodeYAMLStream(input string) ([]*yaml.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		if hasProseKey(&doc) {
+			return nil, errors.New("mapping key contains whitespace; not treating input as YAML")
+		}
 		docs = append(docs, &doc)
 	}
 	if len(docs) == 0 {
 		return nil, errors.New("no YAML documents")
 	}
 	return docs, nil
+}
+
+func hasProseKey(n *yaml.Node) bool {
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i < len(n.Content); i += 2 {
+			k := n.Content[i]
+			if k.Kind == yaml.ScalarNode && k.Style == 0 && strings.ContainsAny(k.Value, " \t") {
+				return true
+			}
+		}
+	}
+	for _, c := range n.Content {
+		if hasProseKey(c) {
+			return true
+		}
+	}
+	return false
 }
 
 func encodeYAMLStream(docs []*yaml.Node) (string, error) {
@@ -97,8 +119,7 @@ func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, fin
 				redactSecretPayloadYAML(valNode, d, replacer, findings)
 				continue
 			}
-			// Plain text that happens to parse as YAML (timestamped log
-			// lines, for one) can carry a secret in a key.
+			// A key can hold a secret too, e.g. a token used as a map key.
 			if isStringScalar(keyNode) {
 				if result, changed := redactString(keyNode.Value, d, replacer, findings); changed {
 					keyNode.Value = result

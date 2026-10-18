@@ -236,3 +236,13 @@ func TestProcessYAML_MultiDocument(t *testing.T) {
 		t.Errorf("secret in second document leaked:\n%s", out)
 	}
 }
+
+func TestProcess_LogLinesThatParseAsYAML(t *testing.T) {
+	d := newDetector(t)
+	input := "2026-10-18T04:10:01.123Z ledger-api config: log_level=debug\n" +
+		"2026-10-18T04:10:03.500Z ledger-api-7f8 ledger-api ERROR dial postgres://ledger:Zq8tWv3nRbK2@postgres.payments.svc.cluster.local:5432/ledger: ECONNREFUSED\n"
+	want := strings.Replace(input, "Zq8tWv3nRbK2", "[REDACTED]", 1)
+	if got, _ := Process(input, d, redact.Redacted); got != want {
+		t.Errorf("log text was rewritten:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
