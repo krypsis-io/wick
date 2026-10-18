@@ -133,6 +133,7 @@ func run(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	output.Notice(os.Stderr, foundCount > 0)
 	if foundCount > 0 {
 		return errFindingsPresent
 	}
@@ -192,6 +193,7 @@ func runTokenize(cfg *config.Config, files []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wick: token map written to %s\n", flagTokenFile)
+	output.Notice(os.Stderr, redacted != input)
 
 	fmt.Print(redacted)
 	return nil
