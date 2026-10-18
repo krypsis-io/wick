@@ -283,6 +283,35 @@ func TestDetector_PII_Email(t *testing.T) {
 	}
 }
 
+func TestDetector_PII_EmailNotURLUserinfo(t *testing.T) {
+	d, err := New()
+	if err != nil {
+		t.Fatalf("failed to create detector: %v", err)
+	}
+
+	tests := []struct {
+		input     string
+		wantEmail string // empty means no email finding
+	}{
+		{`postgres://ledger:bFvY8Csvm0hTLA1m@db.payments.svc:5432/ledger`, ""},
+		{`postgres://ledger:p!w0rd.x@db.payments.svc:5432/ledger`, ""},
+		{`https://jane.doe@company.com/`, "jane.doe@company.com"},
+		{`https://example.com/contact?to=admin@acme.com`, "admin@acme.com"},
+		{`mailto:admin@acme.com`, "admin@acme.com"},
+	}
+	for _, tt := range tests {
+		var got string
+		for _, f := range d.Detect(tt.input) {
+			if f.RuleID == "email" {
+				got = f.Value
+			}
+		}
+		if got != tt.wantEmail {
+			t.Errorf("%s: email = %q, want %q", tt.input, got, tt.wantEmail)
+		}
+	}
+}
+
 func TestDetector_PII_IPv4(t *testing.T) {
 	d, err := New()
 	if err != nil {

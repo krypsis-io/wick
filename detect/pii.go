@@ -10,12 +10,23 @@ type piiPattern struct {
 	ID       string
 	Regex    *regexp.Regexp
 	Validate func(match string) bool // optional post-match validation
+	// InContext optionally rejects a match based on the text before it.
+	InContext func(before string) bool
 }
+
+// urlUserinfoPrefix matches text that ends inside the password of a URL
+// (postgres://user: or postgres://user:pa), so a match starting there is
+// pass@host rather than an email address.
+var urlUserinfoPrefix = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^\s/?#@:]*:[^\s/?#@]*$`)
 
 var piiPatterns = []piiPattern{
 	{
 		ID:    "email",
 		Regex: regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`),
+		// In scheme://user:pass@host the "pass@host" part is URL userinfo,
+		// not an address. Matching it would redact the host along with the
+		// password; the url-credentials rule redacts just the password.
+		InContext: func(before string) bool { return !urlUserinfoPrefix.MatchString(before) },
 	},
 	{
 		ID: "ipv4",
@@ -69,6 +80,9 @@ func matchPII(line string, lineNum int, disabled map[string]bool) []Finding {
 		for _, m := range matches {
 			value := line[m[0]:m[1]]
 			if p.Validate != nil && !p.Validate(value) {
+				continue
+			}
+			if p.InContext != nil && !p.InContext(line[:m[0]]) {
 				continue
 			}
 			findings = append(findings, Finding{

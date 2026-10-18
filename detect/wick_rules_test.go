@@ -74,6 +74,22 @@ func TestWickRules(t *testing.T) {
 		{"non-secret name", `{"name":"LOG_LEVEL","value":"debugging"}`, "", ""},
 		{"pair placeholder", `{"name":"DB_TOKEN","value":"${DB_TOKEN}"}`, "", ""},
 
+		// url-credentials: only the password, so the host stays readable.
+		{"postgres dsn", `dial postgres://ledger:bFvY8Csvm0hTLA1m@db.payments.svc:5432/ledger: refused`, "url-credentials", "bFvY8Csvm0hTLA1m"},
+		{"low-entropy url password", `redis://default:hunter2@cache:6379`, "url-credentials", "hunter2"},
+		{"empty user", `redis://:s3cr3tvalue@cache:6379/0`, "url-credentials", "s3cr3tvalue"},
+		{"https token", `git clone https://x-access-token:a8f3k2m9x7q1z4@github.com/org/repo`, "url-credentials", "a8f3k2m9x7q1z4"},
+		{"url in json", `{"dsn":"mysql://app:Zq8tWv3nRb@10.0.0.5:3306/app"}`, "url-credentials", "Zq8tWv3nRb"},
+		{"ipv6 host", `amqp://guest:Rb7Kp2Lx9@[::1]:5672/`, "url-credentials", "Rb7Kp2Lx9"},
+		{"one-letter scheme", `x://user:hunter2@db.example.com`, "url-credentials", "hunter2"},
+		{"user without password", `ssh://git@github.com/org/repo.git`, "", ""},
+		{"host and port", `https://example.com:8443/path@v2`, "", ""},
+		{"url env reference", `postgres://app:${DB_PASSWORD}@db:5432/app`, "", ""},
+		{"url placeholder", `postgres://user:password@localhost/db`, "", ""},
+		{"url angle placeholder", `postgres://user:<password>@localhost/db`, "", ""},
+		{"url already redacted", `postgres://user:[REDACTED]@localhost/db`, "", ""},
+		{"image digest", `docker://nginx:1.25@sha256:0d17b565c37bcbd895e9d92315a05c1c3c9a29f762b011a10c54a66cd53c9b31`, "", ""},
+
 		// portainer-api-token.
 		{"portainer token", `ptr_CHPWxQ9aZ1kLm2Nb3Vc4Xz5Lk6Jh7Gf8Ds9Aa0=`, "portainer-api-token", "ptr_CHPWxQ9aZ1kLm2Nb3Vc4Xz5Lk6Jh7Gf8Ds9Aa0="},
 		{"ptr identifier", `ptr_to_buffer_element_count_value`, "", ""},
@@ -82,6 +98,7 @@ func TestWickRules(t *testing.T) {
 	wickRules := map[string]bool{
 		"password-assignment": true, "env-secret-assignment": true,
 		"name-value-secret": true, "portainer-api-token": true,
+		"url-credentials": true,
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

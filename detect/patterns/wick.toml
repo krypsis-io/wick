@@ -2,9 +2,10 @@
 # (which is auto-generated and must not be edited by hand). Same format.
 #
 # These cover gaps that matter for redacting logs rather than scanning repos:
-# human-chosen passwords that fail gitleaks' entropy thresholds, and secrets
-# whose key name sits in a sibling field (Portainer, Kubernetes, ECS, docker
-# inspect: {"name": "DB_PASSWORD", "value": "..."}).
+# human-chosen passwords that fail gitleaks' entropy thresholds, passwords in
+# connection URLs, and secrets whose key name sits in a sibling field
+# (Portainer, Kubernetes, ECS, docker inspect:
+# {"name": "DB_PASSWORD", "value": "..."}).
 #
 # Assignment rules allow up to 32 spaces or tabs after the separator because
 # `kubectl describe` and similar tools column-align values
@@ -74,6 +75,30 @@ regexes = [
     '''^\[[A-Z0-9_-]+(?:[:-][0-9a-f]+|-\d+)?\]$''',
     '''(?i)^(?:changeme|change_me|null|nil|none|true|false|undefined|required|optional|redacted|example|placeholder|hidden|masked|empty)$''',
     '''^(?:/|~/|\./|\.\./)''',
+]
+
+[[rules]]
+id = "url-credentials"
+description = "Password in the userinfo of a URL (postgres://user:PASSWORD@host). Only the password is captured, so the scheme, user, host and path stay readable."
+regex = '''(?i)\b[a-z][a-z0-9+.-]{0,30}://[^\s:/?#@"'\x60]{0,128}:([^\s/?#@"'\x60]{1,256})@[a-z0-9\[][^\s/?#@"'\x60]{0,7}'''
+secretGroup = 1
+keywords = ["://"]
+[[rules.allowlists]]
+description = "Image references pinned by digest (docker://nginx:1.25@sha256:...)"
+regexTarget = "match"
+regexes = ['''@sha(?:256|512):''']
+[[rules.allowlists]]
+description = "Placeholders, references, and wick's own replacement markers"
+regexes = [
+    '''^\$\{.*\}$''',
+    '''^\$[A-Za-z_]\w*$''',
+    '''^\$\(''',
+    '''^\{\{.*\}\}$''',
+    '''^%\(?\w*\)?s$''',
+    '''^<[^>]*>$''',
+    '''^[*•x.]+$''',
+    '''^\[[A-Z0-9_-]+(?:[:-][0-9a-f]+|-\d+)?\]$''',
+    '''(?i)^(?:changeme|change_me|pass|password|passwd|pwd|secret|redacted|example|placeholder|hidden|masked|your[_-]?password\w*)$''',
 ]
 
 [[rules]]

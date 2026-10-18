@@ -196,20 +196,27 @@ func walkJSON(v any, d *detect.Detector, replacer redact.Replacer, findings *[]d
 			s, ok := val[k].(string)
 			return s, ok
 		})
+		kind, _ := val["kind"].(string)
 		for k, child := range val {
+			if payload, ok := child.(map[string]any); ok && isSecretPayload(kind, k) {
+				result[k] = redactSecretPayloadJSON(payload, d, replacer, findings)
+				continue
+			}
 			// Redact string values with their key as detection context so
 			// keyword-anchored rules match; recurse into everything else.
 			if s, ok := child.(string); ok {
+				if k == lastAppliedAnnotation {
+					s, _ = redactLastApplied(s, d, replacer, findings)
+				}
 				redactFn := redactKeyedString
 				ctxKey := k
 				if isPair && isPairValueKey(k) {
 					redactFn, ctxKey = redactPairValue, name
 				}
 				if red, changed := redactFn(ctxKey, s, d, replacer, findings); changed {
-					result[k] = red
-				} else {
-					result[k] = s
+					s = red
 				}
+				result[k] = s
 				continue
 			}
 			result[k] = walkJSON(child, d, replacer, findings)
@@ -229,6 +236,18 @@ func walkJSON(v any, d *detect.Detector, replacer redact.Replacer, findings *[]d
 	default:
 		return val
 	}
+}
+
+func redactSecretPayloadJSON(payload map[string]any, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) map[string]any {
+	result := make(map[string]any, len(payload))
+	for k, child := range payload {
+		if s, ok := child.(string); ok {
+			result[k], _ = redactSecretPayloadValue(s, d, replacer, findings)
+			continue
+		}
+		result[k] = walkJSON(child, d, replacer, findings)
+	}
+	return result
 }
 
 // indentOf tries to detect the indentation used in the original JSON.
