@@ -33,10 +33,13 @@ func ProcessYAML(input string, detector *detect.Detector, replacer redact.Replac
 // decodeYAMLStream decodes every document in input; yaml.Unmarshal would
 // keep only the first. Input with an unquoted mapping key containing
 // whitespace is rejected: that is how log lines with ": " parse, and
-// re-encoding them would rewrite the text (long keys become "? key").
+// re-encoding them would rewrite the text (long keys become "? key"). A
+// stream with a Kubernetes Secret in it is kept as YAML regardless, since
+// its values are only recognized structurally.
 func decodeYAMLStream(input string) ([]*yaml.Node, error) {
 	dec := yaml.NewDecoder(strings.NewReader(input))
 	var docs []*yaml.Node
+	prose, secret := false, false
 	for {
 		var doc yaml.Node
 		err := dec.Decode(&doc)
@@ -46,13 +49,15 @@ func decodeYAMLStream(input string) ([]*yaml.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		if hasProseKey(&doc) {
-			return nil, errors.New("mapping key contains whitespace; not treating input as YAML")
-		}
+		prose = prose || hasProseKey(&doc)
+		secret = secret || hasSecret(&doc)
 		docs = append(docs, &doc)
 	}
 	if len(docs) == 0 {
 		return nil, errors.New("no YAML documents")
+	}
+	if prose && !secret {
+		return nil, errors.New("mapping key contains whitespace; not treating input as YAML")
 	}
 	return docs, nil
 }
@@ -68,6 +73,22 @@ func hasProseKey(n *yaml.Node) bool {
 	}
 	for _, c := range n.Content {
 		if hasProseKey(c) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSecret(n *yaml.Node) bool {
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			if n.Content[i].Value == "kind" && n.Content[i+1].Value == "Secret" {
+				return true
+			}
+		}
+	}
+	for _, c := range n.Content {
+		if hasSecret(c) {
 			return true
 		}
 	}
