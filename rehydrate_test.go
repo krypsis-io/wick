@@ -2,7 +2,10 @@ package wick_test
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -10,11 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestRehydrate_StructuredRoundTrip checks that Dehydrate followed by
-// Rehydrate restores JSON and YAML documents to the same data, including
-// originals that contain newlines (PEM keys) or YAML-significant characters.
-// Plain token substitution would put a raw newline inside a JSON string or
-// break YAML indentation.
+// TestRehydrate_StructuredRoundTrip checks that rehydrated JSON and YAML parse
+// to the original data when originals need escaping (newlines, quotes, ": ").
 func TestRehydrate_StructuredRoundTrip(t *testing.T) {
 	pem, _ := fakePEM(t)
 	pass := "s3cr3t: v@lue's #" + randAlnum(t, 8)
@@ -37,17 +37,22 @@ func TestRehydrate_StructuredRoundTrip(t *testing.T) {
 	indented := "    " + strings.ReplaceAll(pem, "\n", "\n    ")
 	blockYAML := "env:\n- name: TLS_PRIVATE_KEY\n  value: |\n" + indented + "\n- name: DB_HOST\n  value: db.internal\n"
 	quotedYAML := "db:\n  host: db.internal\n  password: '" + strings.ReplaceAll(pass, "'", "''") + "'\n"
+	multiYAML := "kind: ConfigMap\ndata:\n  host: db.internal\n---\n" + quotedYAML
+	unquote := func(s string) string { return regexp.MustCompile(`'(\[[A-Z0-9-]+\])'`).ReplaceAllString(s, "$1") }
 
 	cases := []struct {
 		name   string
 		input  string
 		secret string
 		decode func(string) (any, error)
+		edit   func(string) string
 	}{
-		{"json value with newlines", string(podJSON), pem, decodeJSON},
-		{"json nested in a json string", string(nested), pem, decodeJSON},
-		{"yaml block scalar", blockYAML, pem, decodeYAML},
-		{"yaml quoted value with special characters", quotedYAML, pass, decodeYAML},
+		{"json value with newlines", string(podJSON), pem, decodeJSON, nil},
+		{"json nested in a json string", string(nested), pem, decodeJSON, nil},
+		{"yaml block scalar", blockYAML, pem, decodeYAML, nil},
+		{"yaml quoted value with special characters", quotedYAML, pass, decodeYAML, nil},
+		{"multi-document yaml", multiYAML, pass, decodeYAML, nil},
+		{"yaml token left unquoted", quotedYAML, pass, decodeYAML, unquote},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -57,6 +62,9 @@ func TestRehydrate_StructuredRoundTrip(t *testing.T) {
 			}
 			if strings.Contains(dehydrated, c.secret) {
 				t.Fatalf("secret not tokenized:\n%s", dehydrated)
+			}
+			if c.edit != nil {
+				dehydrated = c.edit(dehydrated)
 			}
 			restored, err := wick.Rehydrate(dehydrated, tm)
 			if err != nil {
@@ -84,7 +92,15 @@ func decodeJSON(s string) (any, error) {
 }
 
 func decodeYAML(s string) (any, error) {
-	var v any
-	err := yaml.Unmarshal([]byte(s), &v)
-	return v, err
+	dec := yaml.NewDecoder(strings.NewReader(s))
+	var docs []any
+	for {
+		var v any
+		if err := dec.Decode(&v); errors.Is(err, io.EOF) {
+			return docs, nil
+		} else if err != nil {
+			return nil, err
+		}
+		docs = append(docs, v)
+	}
 }

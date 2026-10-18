@@ -2,6 +2,9 @@ package format
 
 import (
 	"bytes"
+	"errors"
+	"io"
+	"strings"
 
 	"github.com/krypsis-io/wick/detect"
 	"github.com/krypsis-io/wick/redact"
@@ -10,24 +13,58 @@ import (
 
 // ProcessYAML parses YAML, redacts string values, and preserves structure/comments.
 func ProcessYAML(input string, detector *detect.Detector, replacer redact.Replacer) (string, []detect.Finding) {
-	var doc yaml.Node
-	if err := yaml.Unmarshal([]byte(input), &doc); err != nil {
+	docs, err := decodeYAMLStream(input)
+	if err != nil {
 		return ProcessPlain(input, detector, replacer)
 	}
 
 	var allFindings []detect.Finding
-	walkYAML(&doc, detector, replacer, &allFindings)
+	for _, doc := range docs {
+		walkYAML(doc, detector, replacer, &allFindings)
+	}
 
+	out, err := encodeYAMLStream(docs)
+	if err != nil {
+		return ProcessPlain(input, detector, replacer)
+	}
+	return out, allFindings
+}
+
+// decodeYAMLStream decodes every document in input; yaml.Unmarshal would
+// keep only the first.
+func decodeYAMLStream(input string) ([]*yaml.Node, error) {
+	dec := yaml.NewDecoder(strings.NewReader(input))
+	var docs []*yaml.Node
+	for {
+		var doc yaml.Node
+		err := dec.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		docs = append(docs, &doc)
+	}
+	if len(docs) == 0 {
+		return nil, errors.New("no YAML documents")
+	}
+	return docs, nil
+}
+
+func encodeYAMLStream(docs []*yaml.Node) (string, error) {
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
-	if err := enc.Encode(&doc); err != nil {
-		return ProcessPlain(input, detector, replacer)
+	for _, doc := range docs {
+		if err := enc.Encode(doc); err != nil {
+			return "", err
+		}
 	}
 	if err := enc.Close(); err != nil {
-		return ProcessPlain(input, detector, replacer)
+		return "", err
 	}
-	return buf.String(), allFindings
+	return buf.String(), nil
 }
 
 func walkYAML(node *yaml.Node, d *detect.Detector, replacer redact.Replacer, findings *[]detect.Finding) {
