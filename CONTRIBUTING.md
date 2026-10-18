@@ -2,9 +2,9 @@
 
 Thank you for your interest in contributing to Wick! This document outlines the process for contributing.
 
-## Contributor License Agreement (CLA)
+## Licensing of Contributions
 
-All contributors must sign a CLA before their contributions can be merged. This allows us to maintain the dual-license model (AGPL-3.0 + commercial). You will be prompted to sign the CLA when you open your first pull request.
+By opening a pull request, you agree that your contribution is licensed under the same license as the project (see [LICENSE](LICENSE)).
 
 ## Getting Started
 
