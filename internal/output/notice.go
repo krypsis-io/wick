@@ -45,7 +45,9 @@ func (n Notifier) Notify(redacted bool) {
 	if n.Color {
 		msg = ansiYellow + msg + ansiReset
 	}
-	_, _ = fmt.Fprintln(n.Out, msg)
+	if _, err := fmt.Fprintln(n.Out, msg); err != nil {
+		return
+	}
 	if n.Marker != "" {
 		if err := os.MkdirAll(filepath.Dir(n.Marker), 0o755); err == nil {
 			_ = os.WriteFile(n.Marker, nil, 0o644)
@@ -54,11 +56,12 @@ func (n Notifier) Notify(redacted bool) {
 }
 
 // NoticeMarkerPath returns $XDG_STATE_HOME/wick/notice-shown, or
-// ~/.local/state/wick/notice-shown when XDG_STATE_HOME is not set. It returns
-// "" when neither can be found.
+// ~/.local/state/wick/notice-shown when XDG_STATE_HOME is not set or not an
+// absolute path, as the XDG spec requires. It returns "" when neither can be
+// found.
 func NoticeMarkerPath() string {
 	dir := os.Getenv("XDG_STATE_HOME")
-	if dir == "" {
+	if !filepath.IsAbs(dir) {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return ""

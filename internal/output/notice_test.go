@@ -64,8 +64,9 @@ func TestNotifier_NoMarker(t *testing.T) {
 }
 
 func TestNoticeMarkerPath(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", "/state")
-	if got, want := NoticeMarkerPath(), filepath.Join("/state", "wick", "notice-shown"); got != want {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	if got, want := NoticeMarkerPath(), filepath.Join(state, "wick", "notice-shown"); got != want {
 		t.Errorf("with XDG_STATE_HOME: got %q, want %q", got, want)
 	}
 
@@ -73,7 +74,25 @@ func TestNoticeMarkerPath(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	if got, want := NoticeMarkerPath(), filepath.Join(home, ".local", "state", "wick", "notice-shown"); got != want {
+	want := filepath.Join(home, ".local", "state", "wick", "notice-shown")
+	if got := NoticeMarkerPath(); got != want {
 		t.Errorf("without XDG_STATE_HOME: got %q, want %q", got, want)
+	}
+
+	t.Setenv("XDG_STATE_HOME", "relative/state")
+	if got := NoticeMarkerPath(); got != want {
+		t.Errorf("with a relative XDG_STATE_HOME: got %q, want %q", got, want)
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, os.ErrClosed }
+
+func TestNotifier_WriteFails(t *testing.T) {
+	n := Notifier{Out: failingWriter{}, Terminal: true, Marker: filepath.Join(t.TempDir(), "notice-shown")}
+	n.Notify(true)
+	if _, err := os.Stat(n.Marker); !os.IsNotExist(err) {
+		t.Fatalf("marker written although the notice was not delivered: %v", err)
 	}
 }
