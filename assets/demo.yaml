@@ -1,0 +1,49 @@
+# Kubernetes objects for demo.tape. All values are fake. The GitHub token is
+# built from two parts so that secret scanners do not flag this file.
+#
+#   kubectl apply --server-side -f assets/demo.yaml
+#   kubectl -n demo rollout status deploy/checkout
+#   vhs assets/demo.tape
+#   kubectl delete -f assets/demo.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: checkout-db
+  namespace: demo
+stringData:
+  DATABASE_URL: postgres://checkout:Xk9vQ2mLp7Rt@db.shop.svc:5432/orders
+  SESSION_SECRET: 4c9e1f7a2b8d5e3f0a6c
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: checkout
+          image: busybox:1.36.1
+          command:
+            - sh
+            - -c
+            - |
+              token="ghp_""R7mK2xQ9vLp4TzW8nDj3bY5cH6fA0sGtE1uN"
+              echo "level=info msg=\"checkout v3.2.0 starting\" port=8080"
+              echo "level=info msg=\"loaded config\" github_token=$token"
+              echo "level=info msg=\"order placed\" order=8812 user=jordan.lee@shopco.io ip=203.0.113.42"
+              echo "level=error msg=\"db dial failed\" url=postgres://checkout:Xk9vQ2mLp7Rt@db.shop.svc:5432/orders"
+              sleep infinity
