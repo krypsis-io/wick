@@ -198,6 +198,9 @@ func runTokenize(cfg *config.Config, files []string) error {
 	output.Notice(os.Stderr, redacted != input)
 
 	fmt.Print(redacted)
+	if redacted != input {
+		return errFindingsPresent
+	}
 	return nil
 }
 
