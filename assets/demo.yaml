@@ -1,20 +1,23 @@
 # Kubernetes objects for demo.tape. All values are fake. The API key is built
 # from two parts so that secret scanners do not flag this file.
 #
+# Use a test cluster. The delete command removes the wick-demo namespace and
+# everything in it.
+#
 #   kubectl apply --server-side -f assets/demo.yaml
-#   kubectl -n demo rollout status deploy/checkout
+#   kubectl -n wick-demo rollout status deploy/checkout
 #   vhs assets/demo.tape
 #   kubectl delete -f assets/demo.yaml
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: demo
+  name: wick-demo
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: checkout-db
-  namespace: demo
+  namespace: wick-demo
 stringData:
   DATABASE_URL: postgres://checkout:Xk9vQ2mLp7Rt@db.shop.svc:5432/orders
   SESSION_SECRET: 4c9e1f7a2b8d5e3f0a6c
@@ -23,7 +26,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: checkout
-  namespace: demo
+  namespace: wick-demo
 spec:
   replicas: 1
   selector:

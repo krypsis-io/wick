@@ -21,13 +21,13 @@ Enter
 Ctrl+L
 Show
 
-Type "kubectl -n demo logs deploy/checkout"
+Type "kubectl -n wick-demo logs deploy/checkout"
 Sleep 300ms
 Enter
 Sleep 3s
 Enter
 
-Type "kubectl -n demo logs deploy/checkout | wick"
+Type "kubectl -n wick-demo logs deploy/checkout | wick"
 Sleep 300ms
 Enter
 Sleep 5s
@@ -36,7 +36,7 @@ Hide
 Ctrl+L
 Show
 
-Type "kubectl -n demo get secret checkout-db -o yaml | wick --summary"
+Type "kubectl -n wick-demo get secret checkout-db -o yaml | wick --summary"
 Sleep 300ms
 Enter
 Sleep 6s
