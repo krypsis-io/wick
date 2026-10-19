@@ -1,261 +1,181 @@
-<div align="center">
-
 # wick
 
-**Redact secrets and PII from logs, config files, and command output.**
-
 [![CI](https://github.com/krypsis-io/wick/actions/workflows/pr.yml/badge.svg)](https://github.com/krypsis-io/wick/actions/workflows/pr.yml)
-[![Release](https://img.shields.io/github/v/release/krypsis-io/wick?sort=semver&color=blue)](https://github.com/krypsis-io/wick/releases/latest)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/krypsis-io/wick)](go.mod)
+[![Release](https://img.shields.io/github/v/release/krypsis-io/wick?sort=semver)](https://github.com/krypsis-io/wick/releases/latest)
 [![Go Reference](https://pkg.go.dev/badge/github.com/krypsis-io/wick.svg)](https://pkg.go.dev/github.com/krypsis-io/wick)
-[![Go Report Card](https://goreportcard.com/badge/github.com/krypsis-io/wick)](https://goreportcard.com/report/github.com/krypsis-io/wick)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/krypsis-io/wick/badge)](https://securityscorecards.dev/viewer/?uri=github.com/krypsis-io/wick)
-[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-[Quick start](#quick-start) · [Install](#install) · [Usage](#usage) · [Detection](#detection) · [Configuration](#configuration) · [Go library](#go-library)
+wick removes secrets and personal data from logs, config files, and command output.
+It replaces each value it finds with a placeholder and keeps the rest of the text, so the output is still useful for debugging.
+Use it before you paste output into an AI assistant, a GitHub issue, or a support ticket.
+
+```console
+$ kubectl logs deploy/checkout | wick
+level=info msg="checkout v3.2.0 starting" port=8080
+level=info msg="loaded config" api_key=[REDACTED]
+level=info msg="order placed" order=8812 user=[REDACTED] ip=[REDACTED]
+level=error msg="db dial failed" url=postgres://checkout:[REDACTED]@db.shop.svc:5432/orders
+```
+
+[Installation](#installation) • [Usage](#usage) • [Detection](#detection) • [Configuration](#configuration) • [Go library](#go-library)
 
 ![wick redacting kubectl logs and a Kubernetes Secret](assets/demo.gif)
 
-</div>
+*Recorded with [VHS](https://github.com/charmbracelet/vhs) from [`assets/demo.tape`](assets/demo.tape).*
 
-wick is a filter for text that you share. Use it before you paste logs into an AI assistant, a GitHub issue, or a support ticket. It replaces secrets and personal data with placeholders. It keeps the rest of the text, so the output is still useful for debugging.
+## Why use wick?
 
-```diff
-- level=info msg="loaded config" api_key=Qm2LvX7pT4wRn8dJ3bY5cH6f
-+ level=info msg="loaded config" api_key=[REDACTED]
-- level=info msg="order placed" order=8812 user=jordan.lee@shopco.io ip=203.0.113.42
-+ level=info msg="order placed" order=8812 user=[REDACTED] ip=[REDACTED]
-- level=error msg="db dial failed" url=postgres://checkout:Xk9vQ2mLp7Rt@db.shop.svc:5432/orders
-+ level=error msg="db dial failed" url=postgres://checkout:[REDACTED]@db.shop.svc:5432/orders
-```
+* It finds 228 kinds of secrets (the 223 [Gitleaks](https://github.com/gitleaks/gitleaks) rules plus 5 of its own) and 5 kinds of personal data: email addresses, IPv4 and IPv6 addresses, US phone numbers, and US Social Security numbers.
+* It understands JSON, YAML, and `.env` input. Keys stay readable and only values change.
+* It knows Kubernetes. Every value in a Secret's `data` and `stringData` is redacted, whatever the key is called.
+* It keeps context. In `postgres://user:password@host`, only the password is removed.
+* It is reversible. Tokenize mode writes the original values to an encrypted file, so you can put them back into a reply.
+* It is a single static binary. It needs no configuration and makes no network requests.
 
-- **228 secret rules and 5 PII detectors.** The secret rules are the 223 rules from [Gitleaks](https://github.com/gitleaks/gitleaks), plus 5 rules for secrets that appear in logs.
-- **Structure-aware.** wick finds JSON, YAML, and `.env` input from its content. Keys stay readable. Only values change.
-- **Kubernetes-aware.** wick redacts every value in a Secret's `data` and `stringData`, whatever the key name.
-- **Reversible.** Tokenize mode saves the original values in an encrypted file. You can put them back later.
-- **One static binary.** No configuration, no network access, no runtime dependencies.
+## Why not use wick?
 
-## Quick start
+* wick finds only what its rules describe. It does not know your internal token formats, ticket IDs, or hostnames until you add them to `.wick.yaml`. Always read the output before you share it.
+* wick filters text that you are about to share. It does not scan Git history or block commits. For that, use [Gitleaks](https://github.com/gitleaks/gitleaks) or [TruffleHog](https://github.com/trufflesecurity/trufflehog).
+* The personal data detectors are US-centric. Phone numbers and national ID numbers from other countries are not detected.
+* wick re-encodes JSON input, so keys come out sorted.
+* stdin input is limited to 10 MB. Pass larger input as a file.
 
-```bash
-brew install krypsis-io/tap/wick
+## Installation
 
-kubectl logs deploy/api | wick              # redact a stream
-wick app.log .env > shared.txt              # redact files
-kubectl logs deploy/api | wick | pbcopy     # redact to the macOS clipboard
-```
-
-wick writes the redacted text to stdout. It writes notices, summaries, and reports to stderr, so a pipe gets only the redacted text.
-
-## Install
-
-### Homebrew (macOS, Linux)
-
-```bash
-brew install krypsis-io/tap/wick
-```
-
-### Go
-
-```bash
-go install github.com/krypsis-io/wick/cmd/wick@latest
-```
-
-### Install script (macOS, Linux)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/krypsis-io/wick/main/install.sh | sh
-```
-
-The script downloads the latest release for your platform and verifies its SHA-256 checksum. It installs to `/usr/local/bin` if that directory is writable. If not, it installs to `~/.local/bin`.
-
-| Variable | Effect |
+| Method | Command |
 |---|---|
-| `WICK_INSTALL_DIR` | Install to a different directory. |
-| `WICK_VERSION` | Install a specific version, without the leading `v` (for example, `0.4.0`). |
+| Homebrew (macOS, Linux) | `brew install krypsis-io/tap/wick` |
+| Go | `go install github.com/krypsis-io/wick/cmd/wick@latest` |
+| Install script (macOS, Linux) | `curl -fsSL https://raw.githubusercontent.com/krypsis-io/wick/main/install.sh \| sh` |
 
-### Prebuilt binaries
+Prebuilt binaries for Linux, macOS, and Windows (`amd64`, `arm64`) are on the [Releases](https://github.com/krypsis-io/wick/releases) page, with checksums.
 
-Download an archive for Linux, macOS, or Windows (`amd64`, `arm64`) from [Releases](https://github.com/krypsis-io/wick/releases). Each release includes checksums.
+The install script verifies the SHA-256 checksum of the download. It installs to `/usr/local/bin` if that directory is writable, and to `~/.local/bin` if not. Set `WICK_INSTALL_DIR` to choose a different directory, or `WICK_VERSION` (for example, `0.4.0`) to choose a version.
 
 ## Usage
 
-### Redact files, stdin, or a directory
+wick reads files or stdin and writes the redacted text to stdout. Summaries, reports, and other messages go to stderr, so a pipe gets only the redacted text.
+
+The first time wick redacts something on a machine, it prints a one-time reminder that redaction is best-effort.
+
+### Redact a command's output
 
 ```bash
-wick app.log                          # one file
-wick .env config.yaml                 # several files
-kubectl get secret db -o yaml | wick  # stdin
+kubectl logs deploy/api | wick
+docker inspect my-container | wick
+kubectl logs deploy/api | wick | pbcopy     # copy to the clipboard on macOS
+```
+
+### Redact files and directories
+
+```bash
+wick app.log
+wick .env config.yaml > shared.txt
 wick --dir ./configs --out ./configs-safe
 ```
 
 `--dir` redacts every file in the directory tree and writes it to the same path under `--out`. The `--out` directory must not be inside `--dir`.
 
-### See what wick redacted
-
-| Flag | Output to stderr |
-|---|---|
-| `--summary` | The number of findings for each rule. |
-| `--report` | One line for each finding: rule ID, location, and a masked preview. |
-| `--report-unsafe` | The same as `--report`, but with the raw values. **This prints secrets.** |
+### See what was redacted
 
 ```console
-$ kubectl -n demo get secret checkout-db -o yaml | wick --summary > /dev/null
+$ kubectl get secret checkout-db -o yaml | wick --summary > /dev/null
 wick: redacted 2 finding(s) — 2 secret(s)
   kubernetes-secret: 2
-wick: redaction is best-effort; review the output before sharing it
 ```
 
-### Get JSON output
+`--summary` prints the number of findings for each rule. `--report` prints one line for each finding, with the rule ID, the location, and a masked preview. `--report-unsafe` prints the raw values, which puts the secrets on stderr. Use `--format json` to get the redacted text and the findings as one JSON object.
 
-```bash
-wick app.log --format json
-```
+### Change the placeholder
 
-```json
-{
-  "redacted": "email [REDACTED]\n",
-  "findings": [
-    { "category": "pii", "rule_id": "email", "line": 1, "start": 6, "end": 20 }
-  ],
-  "summary": { "total": 1, "by_type": { "email": 1 } }
-}
-```
-
-### Change the replacement style
-
-| Flag | Output |
+| Flag | Placeholder |
 |---|---|
 | `--style redacted` (default) | `[REDACTED]` |
 | `--style stars` | `***` |
-| `--style hash` | `[EMAIL:0f3306f4]`. The same value always gets the same hash, so you can still match values. |
+| `--style hash` | `[EMAIL:0f3306f4]`. The same value always gets the same hash. |
 | `--style 'custom=<removed>'` | `<removed>` |
 
 ### Redact now, restore later
 
-Tokenize mode replaces each value with a numbered token, such as `[EMAIL-1]`. The same value always gets the same token. wick writes the original values to an AES-256-GCM encrypted file. It prints the key to stderr one time.
-
 ```bash
-# 1. Redact. Save the key that wick prints.
-wick --tokenize < app.log > app.safe.log
-
-# 2. Share app.safe.log. Get a reply that contains the tokens.
-
-# 3. Put the original values back into the reply.
-wick --rehydrate --key <KEY> < reply.txt
+wick --tokenize < app.log > app.safe.log        # prints a key to stderr; save it
+wick --rehydrate --key <KEY> < reply.txt        # puts the original values back
 ```
 
-The encrypted file is `.wick-tokens.enc` by default. Use `--token-file` to change the path. Both modes read from stdin only. Rehydrated JSON and YAML stay valid, also when an original value contains newlines or quotes.
+Tokenize mode replaces each value with a numbered token such as `[EMAIL-1]`. The same value always gets the same token. The original values are stored in `.wick-tokens.enc`, encrypted with AES-256-GCM. Use `--token-file` to change the path. Both modes read from stdin only. Rehydrated JSON and YAML stay valid, also when an original value contains newlines or quotes.
 
 ## Detection
 
 | Category | What wick finds |
 |---|---|
 | Gitleaks rules | Cloud provider keys, API tokens, private keys, JWTs, webhook URLs, and more. |
-| Passwords | Values of password-like keys (`password=`, `DB_PASS:`). There is no entropy threshold, so wick also finds weak passwords. |
+| Passwords | Values of password-like keys (`password=`, `DB_PASS:`). There is no entropy threshold, so weak passwords are also found. |
 | Secret-named variables | Values of `*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, and similar names. |
 | Name/value pairs | `{"name": "DB_PASSWORD", "value": "..."}` in Kubernetes, ECS, Portainer, and `docker inspect` output. |
-| URL credentials | The password in `scheme://user:password@host`. The user and the host stay readable. |
+| URL credentials | The password in `scheme://user:password@host`. |
 | Kubernetes Secrets | All `data` and `stringData` values, also the copy in the `kubectl.kubernetes.io/last-applied-configuration` annotation. |
-| PII | Email addresses, IPv4 and IPv6 addresses, US phone numbers, US Social Security numbers. |
-| Custom | Your `patterns` and `blocklist` entries. See [Configuration](#configuration). |
+| Personal data | Email addresses, IPv4 and IPv6 addresses, US phone numbers, US Social Security numbers. |
+| Custom | Your `patterns` and `blocklist` entries. |
 
-To see the rule ID for each finding, use `--report`. To turn off a rule, add its ID to `disable_rules`.
+Run with `--report` to see the rule ID of each finding. To turn off a rule, add its ID to `disable_rules`.
 
 ## Configuration
 
 wick works without configuration. To add rules for a project, create a `.wick.yaml` file:
 
 ```yaml
-style: redacted
-format: text
-
-# Patterns to redact, in addition to the built-in rules
-patterns:
+patterns:                       # redact these, in addition to the built-in rules
   - name: internal-ticket
     regex: "ACME-\\d{4}"
   - name: internal-hostname
     regex: "\\w+\\.internal\\.acme\\.com"
-    replacement: "[INTERNAL-HOST]"   # optional
+    replacement: "[INTERNAL-HOST]"
 
-# Values to never redact
-allowlist:
+allowlist:                      # never redact these
   - pattern: "test@example\\.com"
     regex: true
-    reason: "Test fixture email"
 
-# Values to always redact
-blocklist:
+blocklist:                      # always redact these
   - pattern: "ACME-INTERNAL-[A-Z0-9]+"
-    category: "custom"
-    reason: "Internal project codes"
 
-# More rules in Gitleaks TOML format
-rules_file: "./my-rules.toml"
+disable_rules:                  # built-in rules to turn off
+  - generic-api-key
 
-# Built-in rules to turn off, by rule ID
-disable_rules:
-  - "generic-api-key"
+rules_file: ./my-rules.toml     # more rules, in Gitleaks TOML format
 ```
 
-wick reads configuration from these locations:
+wick reads `~/.config/wick/config.yaml` first, then the nearest `.wick.yaml` in the current directory or a parent. For `style`, `format`, and `rules_file`, the project file overrides the global file. The `--style` and `--format` flags override both files. The lists add together: project entries are added to the global entries.
 
-1. `~/.config/wick/config.yaml` (global)
-2. The nearest `.wick.yaml`, found from the current directory upward (project)
-3. Command-line flags
-
-For `style`, `format`, and `rules_file`, a later location overrides an earlier one. The lists (`patterns`, `allowlist`, `blocklist`, `disable_rules`) add together: the project file adds entries to the global file and does not replace them.
-
-For all options, see [`.wick.yaml.example`](.wick.yaml.example).
+See [`.wick.yaml.example`](.wick.yaml.example) for every option.
 
 ## Go library
 
-```bash
-go get github.com/krypsis-io/wick
-```
-
 ```go
 import (
-	"fmt"
-
 	"github.com/krypsis-io/wick"
 	"github.com/krypsis-io/wick/redact"
 )
 
-func main() {
-	input := "user=jordan.lee@shopco.io ip=203.0.113.42"
-	out, report, err := wick.Redact(input,
-		wick.WithReplacer(redact.Stars),
-		wick.WithDisabledRules([]string{"ipv4"}),
-	)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(out)                      // user=*** ip=203.0.113.42
-	fmt.Println(report.Total, "findings") // 1 findings
-}
+out, report, err := wick.Redact("user=jordan.lee@shopco.io ip=203.0.113.42",
+	wick.WithReplacer(redact.Stars),
+	wick.WithDisabledRules([]string{"ipv4"}),
+)
+// out == "user=*** ip=203.0.113.42", report.Total == 1
 ```
 
-For reversible redaction, use `wick.Dehydrate` and `wick.Rehydrate`. For the full API, see [pkg.go.dev](https://pkg.go.dev/github.com/krypsis-io/wick).
+`wick.Dehydrate` and `wick.Rehydrate` do reversible redaction. See the [package documentation](https://pkg.go.dev/github.com/krypsis-io/wick) for the full API.
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
-| `0` | wick found nothing to redact. `--rehydrate` also exits `0` when it succeeds. |
-| `1` | wick redacted one or more values, or an error occurred. |
-
-## Limitations
-
-- **Detection is best-effort.** wick finds only what its rules describe. It does not know your internal token formats, ticket IDs, or hostnames. Add them with `patterns` or `blocklist`. When wick redacts something, it prints a reminder to stderr. Always read the output before you share it.
-- **wick is not a secrets manager.** It does not replace secret storage, rotation, or leak prevention in Git. For Git history, use a scanner such as Gitleaks.
-- **JSON output is re-encoded.** The values and the nesting stay the same, but the keys are sorted.
-- **stdin is limited to 10 MB.** For larger input, pass the file as an argument.
+| `0` | Nothing was redacted, or `--rehydrate` succeeded. |
+| `1` | One or more values were redacted, or an error occurred. |
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before you open a pull request. To report a vulnerability, follow [SECURITY.md](SECURITY.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-[AGPL-3.0](LICENSE). The bundled Gitleaks rules are MIT-licensed. See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+wick is licensed under [AGPL-3.0](LICENSE). The bundled Gitleaks rules are MIT-licensed; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
