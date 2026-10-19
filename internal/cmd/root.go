@@ -16,6 +16,7 @@ import (
 	"github.com/krypsis-io/wick/internal/output"
 	"github.com/krypsis-io/wick/redact"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -207,8 +208,7 @@ func runTokenize(cfg *config.Config, files []string) error {
 // stderrNotifier returns the notifier for the best-effort notice. Color is
 // off when NO_COLOR is set or TERM is dumb.
 func stderrNotifier() output.Notifier {
-	fi, err := os.Stderr.Stat()
-	tty := err == nil && fi.Mode()&os.ModeCharDevice != 0
+	tty := term.IsTerminal(int(os.Stderr.Fd()))
 	return output.Notifier{
 		Out:      os.Stderr,
 		Terminal: tty,

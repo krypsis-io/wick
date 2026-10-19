@@ -1,10 +1,8 @@
 package output
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -39,7 +37,7 @@ func (n Notifier) Notify(redacted bool) {
 		return
 	}
 	if n.Marker != "" {
-		if _, err := os.Stat(n.Marker); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Stat(n.Marker); err == nil {
 			return
 		}
 	}
