@@ -21,8 +21,8 @@
 wick is a filter for text that you share. Use it before you paste logs into an AI assistant, a GitHub issue, or a support ticket. It replaces secrets and personal data with placeholders. It keeps the rest of the text, so the output is still useful for debugging.
 
 ```diff
-- level=info msg="loaded config" github_token=ghp_R7mK2xQ9vLp4TzW8nDj3bY5cH6fA0sGtE1uN
-+ level=info msg="loaded config" github_token=[REDACTED]
+- level=info msg="loaded config" api_key=Qm2LvX7pT4wRn8dJ3bY5cH6f
++ level=info msg="loaded config" api_key=[REDACTED]
 - level=info msg="order placed" order=8812 user=jordan.lee@shopco.io ip=203.0.113.42
 + level=info msg="order placed" order=8812 user=[REDACTED] ip=[REDACTED]
 - level=error msg="db dial failed" url=postgres://checkout:Xk9vQ2mLp7Rt@db.shop.svc:5432/orders
