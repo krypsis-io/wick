@@ -39,7 +39,10 @@ var rootCmd = &cobra.Command{
 	Long: `Wick detects and redacts secrets and PII from any text stream.
 Pipe anything through it, or pass files directly:
   cat logs.txt | wick
-  wick logs.txt config.yaml`,
+  wick logs.txt config.yaml
+
+Redaction is best-effort: wick finds only what its rules describe.
+Review the output before you share it.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	Args:          cobra.ArbitraryArgs,
@@ -131,7 +134,7 @@ func run(_ *cobra.Command, args []string) error {
 	foundCount, err := executeRunMode(opts, detector, replacer, outputFormat)
 	// Print before the error check: a later file can fail after earlier ones
 	// were already redacted and written out.
-	output.Notice(os.Stderr, foundCount > 0)
+	stderrNotifier().Notify(foundCount > 0)
 	if err != nil {
 		return err
 	}
@@ -195,10 +198,23 @@ func runTokenize(cfg *config.Config, files []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wick: token map written to %s\n", flagTokenFile)
-	output.Notice(os.Stderr, redacted != input)
+	stderrNotifier().Notify(redacted != input)
 
 	fmt.Print(redacted)
 	return nil
+}
+
+// stderrNotifier returns the notifier for the best-effort notice. Color is
+// off when NO_COLOR is set or TERM is dumb.
+func stderrNotifier() output.Notifier {
+	fi, err := os.Stderr.Stat()
+	tty := err == nil && fi.Mode()&os.ModeCharDevice != 0
+	return output.Notifier{
+		Out:      os.Stderr,
+		Terminal: tty,
+		Color:    tty && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb",
+		Marker:   output.NoticeMarkerPath(),
+	}
 }
 
 func runRehydrate(files []string) error {
