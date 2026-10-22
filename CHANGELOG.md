@@ -4,6 +4,25 @@
 
 * close secret detection gaps and mask --report values ([#39](https://github.com/krypsis-io/wick/issues/39)) ([19818de](https://github.com/krypsis-io/wick/commit/19818dede49dc7586cb1be9c43307cc3a1c85f53))
 
+## [0.5.0](https://github.com/krypsis-io/wick/compare/v0.4.0...v0.5.0) (2026-10-22)
+
+
+### Features
+
+* remind on stderr that redaction is best-effort ([#42](https://github.com/krypsis-io/wick/issues/42)) ([ada114b](https://github.com/krypsis-io/wick/commit/ada114b1e38ec5eb6c41b8c1fb653398cf82f84d))
+* show the best-effort reminder once per machine, in a terminal only ([#49](https://github.com/krypsis-io/wick/issues/49)) ([0dd06b6](https://github.com/krypsis-io/wick/commit/0dd06b6373554bd27b43f5d4ec2f5661f057ca10))
+
+
+### Bug Fixes
+
+* catch private keys inside JSON/YAML values and column-aligned env values ([#44](https://github.com/krypsis-io/wick/issues/44)) ([dfc4111](https://github.com/krypsis-io/wick/commit/dfc411167f598311977c079c58644be95c3744ab))
+* exit 1 from --tokenize when it redacts values ([#48](https://github.com/krypsis-io/wick/issues/48)) ([294bfa3](https://github.com/krypsis-io/wick/commit/294bfa32a46d3421b60392651ba09a33cc53f9f1))
+* exit 2 on errors so scripts can tell them apart from findings ([#51](https://github.com/krypsis-io/wick/issues/51)) ([237b489](https://github.com/krypsis-io/wick/commit/237b4895b8983a29fc3631b7840fd66f72f7a30e))
+* redact credentials in Authorization, Cookie and API key headers ([#50](https://github.com/krypsis-io/wick/issues/50)) ([f34526e](https://github.com/krypsis-io/wick/commit/f34526e2e8fbd0aa580dc95990c4cfc1ee8ebcc5))
+* redact URL passwords and Kubernetes Secret values ([#46](https://github.com/krypsis-io/wick/issues/46)) ([3ac0a6c](https://github.com/krypsis-io/wick/commit/3ac0a6c4acb2a1bb50201731a8dbe4a3d5c9804d))
+* rehydrate JSON and YAML into valid documents ([#45](https://github.com/krypsis-io/wick/issues/45)) ([3de0b2b](https://github.com/krypsis-io/wick/commit/3de0b2b9d5421545c98658648124b31e9dd97633))
+* stop reporting hex strings and IDs as US phone numbers ([#52](https://github.com/krypsis-io/wick/issues/52)) ([3010364](https://github.com/krypsis-io/wick/commit/3010364b34c99f19ff25a33a8dc6beb3f34ee909))
+
 ## [0.3.1](https://github.com/krypsis-io/wick/compare/v0.3.0...v0.3.1) (2026-08-12)
 
 ## [0.3.0](https://github.com/krypsis-io/wick/compare/v0.2.0...v0.3.0) (2026-07-31)
