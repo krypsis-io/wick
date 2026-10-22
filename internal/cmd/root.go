@@ -77,11 +77,23 @@ type runOptions struct {
 
 // Execute runs the root command.
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		if !errors.Is(err, errFindingsPresent) {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(1)
+	err := rootCmd.Execute()
+	if err != nil && !errors.Is(err, errFindingsPresent) {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	os.Exit(exitCode(err))
+}
+
+// exitCode follows grep: 0 when nothing was redacted, 1 when something was
+// redacted, and 2 on error.
+func exitCode(err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, errFindingsPresent):
+		return 1
+	default:
+		return 2
 	}
 }
 

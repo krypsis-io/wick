@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,6 +31,26 @@ func TestRunTokenize_ExitStatus(t *testing.T) {
 			err := runTokenize(&config.Config{}, nil)
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("runTokenize() error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestExitCode(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"clean", nil, 0},
+		{"redacted", errFindingsPresent, 1},
+		{"wrapped findings", fmt.Errorf("dir mode: %w", errFindingsPresent), 1},
+		{"error", errors.New("open app.log: no such file or directory"), 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := exitCode(tt.err); got != tt.want {
+				t.Errorf("exitCode(%v) = %d, want %d", tt.err, got, tt.want)
 			}
 		})
 	}
