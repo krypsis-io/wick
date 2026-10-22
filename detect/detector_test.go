@@ -354,6 +354,64 @@ func TestDetector_PII_SSN(t *testing.T) {
 	}
 }
 
+func TestDetector_PII_USPhone(t *testing.T) {
+	d, err := New()
+	if err != nil {
+		t.Fatalf("failed to create detector: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		input     string
+		wantPhone string // empty means no us-phone finding
+	}{
+		{"parenthesized area code", `Call (415) 555-0132 now`, "(415) 555-0132"},
+		{"dashes", `Call 415-555-0132 now`, "415-555-0132"},
+		{"dots", `Call 415.555.0132 now`, "415.555.0132"},
+		{"country code with spaces", `Call +1 415 555 0132 now`, "+1 415 555 0132"},
+		{"bare digits in text", `Call 4155550132 now`, "4155550132"},
+		{"bare digits alone", `4155550132`, "4155550132"},
+		{"tel URI", `tel:+14155550132`, "+14155550132"},
+		{"key=value", `phone=415-555-0132`, "415-555-0132"},
+		{"JSON value", `{"phone":"4155550132"}`, "4155550132"},
+		{"end of sentence", `phone: 1-415-555-0132.`, "1-415-555-0132"},
+		{"after a short number", `room 21 415-555-0132`, "415-555-0132"},
+
+		{"digest response hex", `response="6629fae49393a05397450978507c4ef1"`, ""},
+		{"digest nonce hex", `nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093"`, ""},
+		{"MD5", `md5=d41d8cd98f00b204e9800998ecf8427e`, ""},
+		{"SHA-1", `sha1=da39a3ee5e6b4b0d3255bfef95601890afd80709`, ""},
+		{"SHA-256", `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, ""},
+		{"UUID", `id=550e8400-e29b-41d4-a716-446655440000`, ""},
+		{"trace ID", `trace_id=4bf92f3577b34da6a3ce929d0e0e4736`, ""},
+		{"long numeric ID", `user_id=12345678901234`, ""},
+		{"12-digit ID", `order_id=98765432109`, ""},
+		{"epoch milliseconds", `ts=1712345678901`, ""},
+		{"compact timestamp", `ts=20240405123456`, ""},
+		{"date-prefixed order ID", `order=ORD-20231115-4155550132`, ""},
+		{"prefixed order ID", `order=ORD-4155550132`, ""},
+		{"dotted version", `version=10.234.567.8901`, ""},
+		{"trailing dashed segment", `ref=415-555-0132-77`, ""},
+		{"letter suffix", `port 4155550132x`, ""},
+		{"letter prefix", `sid=a4155550132`, ""},
+		{"underscore prefix", `key_4155550132`, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got string
+			for _, f := range d.Detect(tt.input) {
+				if f.RuleID == "us-phone" {
+					got = f.Value
+				}
+			}
+			if got != tt.wantPhone {
+				t.Errorf("us-phone = %q, want %q", got, tt.wantPhone)
+			}
+		})
+	}
+}
+
 func TestDetector_CustomPattern(t *testing.T) {
 	d, err := New()
 	if err != nil {
