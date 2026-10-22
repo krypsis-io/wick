@@ -10,7 +10,7 @@ Require wick
 Set Shell "bash"
 Set FontSize 16
 Set Width 1040
-Set Height 400
+Set Height 340
 Set Padding 20
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 35ms
@@ -36,7 +36,7 @@ Hide
 Ctrl+L
 Show
 
-Type "kubectl -n wick-demo get secret checkout-db -o yaml | wick --summary"
+Type "kubectl -n wick-demo get secret checkout-db -o yaml | wick"
 Sleep 300ms
 Enter
 Sleep 6s
