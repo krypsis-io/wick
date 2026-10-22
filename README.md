@@ -63,7 +63,7 @@ wick app.log > issue-safe.log
 wick --dir ./configs --out ./safe-configs
 ```
 
-Exit code `1` means Wick found and redacted something; `0` means the input was clean.
+Exit code `1` means Wick found and redacted something, `0` means the input was clean, and `2` means an error occurred.
 
 ### Output options
 
@@ -134,7 +134,8 @@ Config is loaded from `~/.config/wick/config.yaml` (global), then the nearest `.
 | Code | Meaning |
 |------|---------|
 | `0` | No secrets or PII detected |
-| `1` | Secrets or PII detected, or command error |
+| `1` | Secrets or PII detected |
+| `2` | Error, such as an unreadable file or an invalid flag |
 
 ## Scope
 
