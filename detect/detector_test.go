@@ -376,6 +376,8 @@ func TestDetector_PII_USPhone(t *testing.T) {
 		{"JSON value", `{"phone":"4155550132"}`, "4155550132"},
 		{"end of sentence", `phone: 1-415-555-0132.`, "1-415-555-0132"},
 		{"after a short number", `room 21 415-555-0132`, "415-555-0132"},
+		{"x extension", `contact=415-555-0132x123`, "415-555-0132"},
+		{"ext extension", `contact=415-555-0132ext.12`, "415-555-0132"},
 
 		{"digest response hex", `response="6629fae49393a05397450978507c4ef1"`, ""},
 		{"digest nonce hex", `nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093"`, ""},
@@ -393,6 +395,7 @@ func TestDetector_PII_USPhone(t *testing.T) {
 		{"dotted version", `version=10.234.567.8901`, ""},
 		{"trailing dashed segment", `ref=415-555-0132-77`, ""},
 		{"letter suffix", `port 4155550132x`, ""},
+		{"letters after extension digits", `id=4155550132x12ab`, ""},
 		{"letter prefix", `sid=a4155550132`, ""},
 		{"underscore prefix", `key_4155550132`, ""},
 	}

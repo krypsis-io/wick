@@ -12,6 +12,11 @@ type piiPattern struct {
 	Validate func(match string) bool // optional post-match validation
 	// InContext optionally rejects a match based on the text around it.
 	InContext func(before, after string) bool
+	// RescanInside searches again one byte after a match InContext rejects,
+	// instead of after its end. Use it when a rejected match can hide a real
+	// one: in "21 415-555-0132" the rejected "1 415-555-0132" hides the
+	// phone number.
+	RescanInside bool
 }
 
 // urlUserinfoPrefix matches text that ends inside the password of a URL
@@ -50,7 +55,8 @@ var piiPatterns = []piiPattern{
 		),
 		// Ten digits inside a hex hash, UUID, longer number, or dotted or
 		// dashed ID are not a phone number.
-		InContext: standaloneNumber,
+		InContext:    standalonePhone,
+		RescanInside: true,
 	},
 	{
 		// Match any XXX-XX-XXXX, then validate to exclude invalid prefixes.
@@ -69,6 +75,17 @@ var piiPatterns = []piiPattern{
 				group != 0 && serial != 0
 		},
 	},
+}
+
+// phoneExtension matches an extension written directly after a phone
+// number, as in 415-555-0132x12 or 415-555-0132ext.12.
+var phoneExtension = regexp.MustCompile(`^(?i)(?:x|ext\.?)\d{1,6}`)
+
+func standalonePhone(before, after string) bool {
+	if ext := phoneExtension.FindString(after); ext != "" {
+		after = after[len(ext):]
+	}
+	return standaloneNumber(before, after)
 }
 
 // standaloneNumber reports whether a match is not part of a longer token:
@@ -115,9 +132,10 @@ func matchPII(line string, lineNum int, disabled map[string]bool) []Finding {
 			}
 			start, end := pos+loc[0], pos+loc[1]
 			if p.InContext != nil && !p.InContext(line[:start], line[end:]) {
-				// Search again one byte later: in "21 415-555-0132" the
-				// rejected "1 415-555-0132" hides the real number.
-				pos = start + 1
+				pos = end
+				if p.RescanInside {
+					pos = start + 1
+				}
 				continue
 			}
 			pos = max(end, start+1)
