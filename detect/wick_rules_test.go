@@ -27,6 +27,10 @@ func TestWickRules(t *testing.T) {
 		t.Fatalf("failed to create detector: %v", err)
 	}
 
+	// Split so secret scanners do not flag the fixtures as real tokens.
+	jwt := "eyJhbGciOiJIUzI1NiJ9." + "eyJzdWIiOiIxIn0." + "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"
+	vault := "hv" + "s." + "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"
+
 	tests := []struct {
 		name      string
 		input     string
@@ -90,6 +94,45 @@ func TestWickRules(t *testing.T) {
 		{"url already redacted", `postgres://user:[REDACTED]@localhost/db`, "", ""},
 		{"image digest", `docker://nginx:1.25@sha256:0d17b565c37bcbd895e9d92315a05c1c3c9a29f762b011a10c54a66cd53c9b31`, "", ""},
 
+		// authorization-header: only the credential, so the scheme stays readable.
+		{"bearer header", `Authorization: Bearer 7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c`, "authorization-header", "7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c"},
+		{"curl -v request line", `> authorization: bearer Zx81kQp2Lm9vRt4Ws7Yb3Nc6`, "authorization-header", "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"},
+		{"basic header", `Authorization: Basic Y2hlY2tvdXQ6WGs5dlEybUxwN1J0`, "authorization-header", "Y2hlY2tvdXQ6WGs5dlEybUxwN1J0"},
+		{"proxy authorization", `Proxy-Authorization: Basic dTpYazl2UTJtTHA3UnRaeg==`, "authorization-header", "dTpYazl2UTJtTHA3UnRaeg=="},
+		{"token scheme", `Authorization: Token Zx81kQp2Lm9vRt4Ws7Yb3Nc6Hq0`, "authorization-header", "Zx81kQp2Lm9vRt4Ws7Yb3Nc6Hq0"},
+		{"key= scheme", `Authorization: key=AAAAZx81kQp2Lm9vRt4Ws7Yb3Nc6`, "authorization-header", "AAAAZx81kQp2Lm9vRt4Ws7Yb3Nc6"},
+		{"jwt bearer", `Authorization: Bearer ` + jwt, "authorization-header", jwt},
+		{"logfmt assignment", `authorization="Bearer 7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c"`, "authorization-header", "7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c"},
+		{"header inside logfmt value", `msg="request" headers="Authorization: Bearer Zx81kQp2Lm9vRt4Ws7Yb3Nc6"`, "authorization-header", "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"},
+		{"json header", `{"Authorization":"Bearer Zx81kQp2Lm9vRt4Ws7Yb3Nc6","Accept":"*/*"}`, "authorization-header", "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"},
+		{"escaped json header", `msg="{\"Authorization\":\"Bearer Zx81kQp2Lm9vRt4Ws7Yb3Nc6\"}"`, "authorization-header", "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"},
+		{"python dict header", `{'Authorization': 'Bearer Zx81kQp2Lm9vRt4Ws7Yb3Nc6'}`, "authorization-header", "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"},
+		{"go header dump", `map[Authorization:[Bearer Zx81kQp2Lm9vRt4Ws7Yb3Nc6]]`, "authorization-header", "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"},
+		{"bearer already redacted", `Authorization: Bearer [REDACTED]`, "", ""},
+		{"bearer angle placeholder", `Authorization: Bearer <token>`, "", ""},
+		{"kubectl masked bearer", `-H "Authorization: Bearer <masked>"`, "", ""},
+		{"bearer env reference", `Authorization: Bearer ${TOKEN}`, "", ""},
+		{"bearer bare env reference", `Authorization: Bearer $API_TOKEN`, "", ""},
+		{"bearer template", `Authorization: Bearer {{ .Values.token }}`, "", ""},
+		{"bearer your-token placeholder", `Authorization: Bearer YOUR_ACCESS_TOKEN`, "", ""},
+		{"bearer mask", `Authorization: Bearer ********`, "", ""},
+		{"bearer prose word", `Authorization: Bearer authentication`, "", ""},
+		{"bearer in prose", `Send a Bearer token in the Authorization header.`, "", ""},
+		{"authorization without scheme", `Authorization: required`, "", ""},
+
+		// api-key-header: no entropy threshold.
+		{"x-api-key", `X-Api-Key: Zx81kQp2Lm9vRt4Ws7Yb3Nc6`, "api-key-header", "Zx81kQp2Lm9vRt4Ws7Yb3Nc6"},
+		{"low-entropy api key", `X-Api-Key: abc123abc123`, "api-key-header", "abc123abc123"},
+		{"x-auth-token", `> X-Auth-Token: Qm9vRt4Ws7Yb3Nc6Hq0Zx81`, "api-key-header", "Qm9vRt4Ws7Yb3Nc6Hq0Zx81"},
+		{"api-key", `api-key: 7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c`, "api-key-header", "7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c"},
+		{"gitlab private-token", `PRIVATE-TOKEN: glpat-short1234`, "api-key-header", "glpat-short1234"},
+		{"vault token", `X-Vault-Token: ` + vault, "api-key-header", vault},
+		{"azure subscription key", `Ocp-Apim-Subscription-Key: 7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c`, "api-key-header", "7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c"},
+		{"api key env reference", `X-Api-Key: ${API_KEY}`, "", ""},
+		{"api key prose word", `X-Api-Key: required`, "", ""},
+		{"api key id header", `X-Api-Key-Id: 12345678abcd`, "", ""},
+		{"api key already redacted", `X-Api-Key: [REDACTED]`, "", ""},
+
 		// portainer-api-token.
 		{"portainer token", `ptr_CHPWxQ9aZ1kLm2Nb3Vc4Xz5Lk6Jh7Gf8Ds9Aa0=`, "portainer-api-token", "ptr_CHPWxQ9aZ1kLm2Nb3Vc4Xz5Lk6Jh7Gf8Ds9Aa0="},
 		{"ptr identifier", `ptr_to_buffer_element_count_value`, "", ""},
@@ -98,7 +141,8 @@ func TestWickRules(t *testing.T) {
 	wickRules := map[string]bool{
 		"password-assignment": true, "env-secret-assignment": true,
 		"name-value-secret": true, "portainer-api-token": true,
-		"url-credentials": true,
+		"url-credentials": true, "authorization-header": true,
+		"api-key-header": true,
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

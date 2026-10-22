@@ -58,7 +58,7 @@ func (d *Detector) DisableRules(ids []string) {
 	d.secretRules = kept
 
 	// Also track IDs of rules that are not regex rules (email, ipv4,
-	// kubernetes-secret, ...).
+	// kubernetes-secret, cookie-header, ...).
 	for id := range disabled {
 		if d.disabled == nil {
 			d.disabled = make(map[string]bool)
@@ -85,6 +85,7 @@ func (d *Detector) Detect(input string) []Finding {
 	for i, line := range lines {
 		lineNum := i + 1
 		all = append(all, matchSecretRules(d.secretRules, line, lineNum)...)
+		all = append(all, d.matchCookies(line, lineNum)...)
 		all = append(all, matchPII(line, lineNum, d.disabled)...)
 		all = append(all, matchCustom(d.customPatterns, line, lineNum)...)
 	}

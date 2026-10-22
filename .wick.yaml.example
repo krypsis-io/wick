@@ -39,3 +39,4 @@
 # disable_rules:
 #   - "generic-api-key"
 #   - "email"
+#   - "cookie-header"   # keep cookie values (redacted by default when 8+ characters)

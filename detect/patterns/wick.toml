@@ -13,6 +13,9 @@
 #
 # Every rule shares the same placeholder allowlist so that env references,
 # templates, masks, and wick's own replacement markers are not re-redacted.
+# The HTTP header rules need less of it: their values stop at brackets,
+# braces, and angle brackets, so ${TOKEN}, {{ .Token }}, <token>, and
+# [REDACTED] never match in the first place.
 
 title = "wick"
 
@@ -99,6 +102,35 @@ regexes = [
     '''^[*•x.]+$''',
     '''^\[[A-Z0-9_-]+(?:[:-][0-9a-f]+|-\d+)?\]$''',
     '''(?i)^(?:changeme|change_me|pass|password|passwd|pwd|secret|redacted|example|placeholder|hidden|masked|your[_-]?password\w*)$''',
+]
+
+[[rules]]
+id = "authorization-header"
+description = "Credential in an Authorization or Proxy-Authorization header (Bearer, Basic, Token, ...). Only the credential is captured, so the scheme stays readable. Covers raw headers, curl -v output, and header values inside logfmt, JSON, and Go header dumps."
+regex = '''(?i)\b(?:proxy-)?authorization\\?["']?[ \t]{0,3}(?:=>|:=|=|:)[ \t]{0,32}\\?["']?\[?(?:bearer|basic|token|bot|jwt|oauth|apikey|api-key|key|ssws|sso-key|splunk|negotiate|ntlm)(?:[ \t]+|=)([^\s"'\x60\\,;\[\]<>(){}]{8,})'''
+keywords = ["authorization"]
+[[rules.allowlists]]
+description = "Placeholders, references, prose words, and wick's own replacement markers"
+regexes = [
+    '''^\$[A-Za-z_]\w*$''',
+    '''^[*•x.]+$''',
+    '''^[A-Za-z][a-z]+$''',
+    '''(?i)^(?:redacted|example|placeholder|hidden|masked|your[_-]?\w*)$''',
+]
+
+[[rules]]
+id = "api-key-header"
+description = "Value of an API key or token header (X-Api-Key, Api-Key, X-Auth-Token, X-Access-Token, Private-Token, X-Vault-Token, ...). No entropy threshold."
+regex = '''(?i)\b(?:api-?key|api-?token|auth-?token|access-?token|private-token|session-token|security-token|subscription-key|vault-token|consul-token|nomad-token)\\?["']?[ \t]{0,3}(?:=>|:=|=|:)[ \t]{0,32}\\?["']?\[?([^\s"'\x60\\,;\[\]<>(){}]{8,})'''
+keywords = ["key", "token"]
+[[rules.allowlists]]
+description = "Placeholders, references, prose words, and wick's own replacement markers"
+regexes = [
+    '''^\$[A-Za-z_]\w*$''',
+    '''^[*•x.]+$''',
+    '''^[A-Za-z][a-z]+$''',
+    '''(?i)^(?:changeme|change_me|redacted|example|placeholder|hidden|masked|your[_-]?\w*)$''',
+    '''^(?:/|~/|\./|\.\./)''',
 ]
 
 [[rules]]
