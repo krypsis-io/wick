@@ -69,7 +69,7 @@ wick --dir ./configs --out ./configs-safe
 
 `--dir` redacts every file in the directory tree and writes it to the same path under `--out`. The `--out` directory must not be inside `--dir`.
 
-wick exits with `0` when nothing was redacted and with `1` when something was redacted or an error occurred. In a script that uses `set -e` or `set -o pipefail`, add `|| true` after wick, or the script stops when wick finds something.
+wick exits with `0` when nothing was redacted, `1` when something was redacted, and `2` on an error. A script that uses `set -e` stops when wick finds something. To stop only on errors, write `wick app.log > safe.log || [ $? -eq 1 ]`.
 
 ### See what was redacted
 
