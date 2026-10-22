@@ -10,8 +10,13 @@ type piiPattern struct {
 	ID       string
 	Regex    *regexp.Regexp
 	Validate func(match string) bool // optional post-match validation
-	// InContext optionally rejects a match based on the text before it.
-	InContext func(before string) bool
+	// InContext optionally rejects a match based on the text around it.
+	InContext func(before, after string) bool
+	// RescanInside searches again one byte after a match InContext rejects,
+	// instead of after its end. Use it when a rejected match can hide a real
+	// one: in "21 415-555-0132" the rejected "1 415-555-0132" hides the
+	// phone number.
+	RescanInside bool
 }
 
 // urlUserinfoPrefix matches text that ends inside the password of a URL
@@ -26,7 +31,7 @@ var piiPatterns = []piiPattern{
 		// In scheme://user:pass@host the "pass@host" part is URL userinfo,
 		// not an address. Matching it would redact the host along with the
 		// password; the url-credentials rule redacts just the password.
-		InContext: func(before string) bool { return !urlUserinfoPrefix.MatchString(before) },
+		InContext: func(before, _ string) bool { return !urlUserinfoPrefix.MatchString(before) },
 	},
 	{
 		ID: "ipv4",
@@ -48,6 +53,10 @@ var piiPatterns = []piiPattern{
 		Regex: regexp.MustCompile(
 			`(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?[2-9]\d{2}[-.\s]?\d{4}`,
 		),
+		// Ten digits inside a hex hash, UUID, longer number, or dotted or
+		// dashed ID are not a phone number.
+		InContext:    standalonePhone,
+		RescanInside: true,
 	},
 	{
 		// Match any XXX-XX-XXXX, then validate to exclude invalid prefixes.
@@ -68,6 +77,46 @@ var piiPatterns = []piiPattern{
 	},
 }
 
+// phoneExtension matches an extension written directly after a phone
+// number, as in 415-555-0132x12 or 415-555-0132ext.12.
+var phoneExtension = regexp.MustCompile(`^(?i)(?:x|ext\.?)\d{1,6}`)
+
+func standalonePhone(before, after string) bool {
+	if ext := phoneExtension.FindString(after); ext != "" {
+		after = after[len(ext):]
+	}
+	return standaloneNumber(before, after)
+}
+
+// standaloneNumber reports whether a match is not part of a longer token:
+// no letter, digit, or underscore touches it, and no "-" or "." joins it to
+// one (20231115-4155550132, 10.234.567.8901, 415-555-0132-77).
+func standaloneNumber(before, after string) bool {
+	if n := len(before); n > 0 {
+		if isTokenChar(before[n-1]) {
+			return false
+		}
+		if n > 1 && isJoiner(before[n-1]) && isTokenChar(before[n-2]) {
+			return false
+		}
+	}
+	if len(after) > 0 {
+		if isTokenChar(after[0]) {
+			return false
+		}
+		if len(after) > 1 && isJoiner(after[0]) && isTokenChar(after[1]) {
+			return false
+		}
+	}
+	return true
+}
+
+func isTokenChar(c byte) bool {
+	return c == '_' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+}
+
+func isJoiner(c byte) bool { return c == '-' || c == '.' }
+
 // matchPII runs all PII patterns against a single line and returns findings.
 // disabled is an optional set of rule IDs to skip (may be nil).
 func matchPII(line string, lineNum int, disabled map[string]bool) []Finding {
@@ -76,21 +125,30 @@ func matchPII(line string, lineNum int, disabled map[string]bool) []Finding {
 		if disabled[p.ID] {
 			continue
 		}
-		matches := p.Regex.FindAllStringIndex(line, -1)
-		for _, m := range matches {
-			value := line[m[0]:m[1]]
-			if p.Validate != nil && !p.Validate(value) {
+		for pos := 0; pos <= len(line); {
+			loc := p.Regex.FindStringIndex(line[pos:])
+			if loc == nil {
+				break
+			}
+			start, end := pos+loc[0], pos+loc[1]
+			if p.InContext != nil && !p.InContext(line[:start], line[end:]) {
+				pos = end
+				if p.RescanInside {
+					pos = start + 1
+				}
 				continue
 			}
-			if p.InContext != nil && !p.InContext(line[:m[0]]) {
+			pos = max(end, start+1)
+			value := line[start:end]
+			if p.Validate != nil && !p.Validate(value) {
 				continue
 			}
 			findings = append(findings, Finding{
 				Category: "pii",
 				RuleID:   p.ID,
 				Value:    value,
-				Start:    m[0],
-				End:      m[1],
+				Start:    start,
+				End:      end,
 				Line:     lineNum,
 			})
 		}
