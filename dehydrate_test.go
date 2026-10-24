@@ -3,6 +3,7 @@ package wick
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -270,4 +271,20 @@ func mustGenerateKey(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return k
+}
+
+func TestUnknownTokens(t *testing.T) {
+	_, tm, err := Dehydrate("from a@acme.com via 10.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := "[EMAIL-1] [EMAIL-3] [EMAIL-2] [EMAIL-3] [IPV4-1] [IPV4-7] [ERROR-404] [CVE-2024-1234]"
+	got := UnknownTokens(input, tm)
+	want := []string{"[EMAIL-2]", "[EMAIL-3]", "[IPV4-7]"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got := UnknownTokens("[EMAIL-1]", TokenMap{}); got != nil {
+		t.Errorf("empty token map: got %v", got)
+	}
 }

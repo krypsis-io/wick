@@ -102,13 +102,16 @@ func TestTokenize_KeychainKey(t *testing.T) {
 	if !strings.Contains(stderr, "stored a new key in the system keychain") || strings.Contains(stderr, "key:") {
 		t.Errorf("first run stderr: %q", stderr)
 	}
+	if !strings.Contains(stderr, "new token map at "+path) {
+		t.Errorf("first run does not show the token map path: %q", stderr)
+	}
 
 	out, stderr, _ = tokenize(t, "cc b@acme.com and a@acme.com\n")
 	if out != "cc [EMAIL-2] and [EMAIL-1]\n" {
 		t.Errorf("second run: got %q", out)
 	}
-	if strings.Contains(stderr, "stored a new key") {
-		t.Errorf("second run made a new key: %q", stderr)
+	if stderr != "" {
+		t.Errorf("second run stderr: %q", stderr)
 	}
 
 	out, _, err = rehydrate(t, "[EMAIL-1] wrote to [EMAIL-2]\n")
@@ -220,6 +223,48 @@ func TestTokenMapStatusUnknown(t *testing.T) {
 	}
 	if _, _, err := rehydrate(t, "x\n"); !errors.Is(err, os.ErrPermission) {
 		t.Errorf("rehydrate: got %v, want a permission error", err)
+	}
+}
+
+func TestTokenizeAndRehydrate_Files(t *testing.T) {
+	resetTokenFlags(t)
+	dir := t.TempDir()
+	a, b, reply := filepath.Join(dir, "a.log"), filepath.Join(dir, "b.log"), filepath.Join(dir, "reply.txt")
+	for path, data := range map[string]string{a: "from a@acme.com\n", b: "to b@acme.com\n", reply: "[EMAIL-2] answered [EMAIL-1]\n"} {
+		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out, _, err := runCaptured(t, "", func() error { return runTokenize(&config.Config{}, []string{a, b}) })
+	if !errors.Is(err, errFindingsPresent) || out != "from [EMAIL-1]\nto [EMAIL-2]\n" {
+		t.Fatalf("tokenize files: got %q, %v", out, err)
+	}
+	out, _, err = runCaptured(t, "", func() error { return runRehydrate([]string{reply}) })
+	if err != nil || out != "b@acme.com answered a@acme.com\n" {
+		t.Errorf("rehydrate file: got %q, %v", out, err)
+	}
+	if _, _, err := runCaptured(t, "", func() error { return runTokenize(&config.Config{}, []string{dir}) }); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("tokenize a directory: got %v", err)
+	}
+}
+
+func TestRehydrate_UnknownTokens(t *testing.T) {
+	resetTokenFlags(t)
+	tokenize(t, "contact a@acme.com\n")
+
+	out, stderr, err := rehydrate(t, "[EMAIL-1], [EMAIL-9], [EMAIL-9] and [ERROR-404]\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "a@acme.com, [EMAIL-9], [EMAIL-9] and [ERROR-404]\n" {
+		t.Errorf("stdout: %q", out)
+	}
+	if want := "wick: 1 token is not in the token map: [EMAIL-9]\n"; stderr != want {
+		t.Errorf("stderr: got %q, want %q", stderr, want)
+	}
+	if _, stderr, _ := rehydrate(t, "[EMAIL-1]\n"); stderr != "" {
+		t.Errorf("stderr with only known tokens: %q", stderr)
 	}
 }
 
@@ -390,17 +435,45 @@ func TestLockTokenMap(t *testing.T) {
 	}
 }
 
-func TestValidateRunFlags_Forget(t *testing.T) {
-	resetTokenFlags(t)
-	flagForget, flagTokenize = true, true
-	if err := validateRunFlags(nil); err == nil {
-		t.Error("expected an error for --forget with --tokenize")
+func TestValidateRunFlags_TokenModes(t *testing.T) {
+	tests := []struct {
+		name  string
+		set   func()
+		files []string
+		want  string
+	}{
+		{"forget with tokenize", func() { flagForget, flagTokenize = true, true }, nil, "--forget cannot be combined"},
+		{"forget with a file", func() { flagForget = true }, []string{"app.log"}, "--forget cannot be combined"},
+		{"forget with key", func() { flagForget, flagKey = true, "k" }, nil, "--key cannot be combined with --forget"},
+		{"tokenize with dir", func() { flagTokenize, flagDir = true, "logs" }, nil, "--tokenize does not support --dir"},
+		{"tokenize with format", func() { flagTokenize, flagFormat = true, "json" }, nil, "--format cannot be combined with --tokenize"},
+		{"tokenize with style", func() { flagTokenize, flagStyle = true, "stars" }, nil, "--style cannot be combined with --tokenize"},
+		{"tokenize with summary", func() { flagTokenize, flagSummary = true, true }, nil, "--summary cannot be combined with --tokenize"},
+		{"rehydrate with report", func() { flagRehydrate, flagReport = true, true }, nil, "--report cannot be combined with --rehydrate"},
+		{"rehydrate with report-unsafe", func() { flagRehydrate, flagUnsafe = true, true }, nil, "--report-unsafe cannot be combined with --rehydrate"},
+		{"key without a token mode", func() { flagKey = "k" }, nil, "--key is only valid"},
+		{"token-file without a token mode", func() { flagTokenFile = "x.enc" }, nil, "--token-file is only valid"},
+		{"forget alone", func() { flagForget = true }, nil, ""},
+		{"forget with token-file", func() { flagForget, flagTokenFile = true, "x.enc" }, nil, ""},
+		{"tokenize with files and key", func() { flagTokenize, flagKey = true, "k" }, []string{"app.log"}, ""},
 	}
-	flagTokenize = false
-	if err := validateRunFlags([]string{"app.log"}); err == nil {
-		t.Error("expected an error for --forget with a file")
-	}
-	if err := validateRunFlags(nil); err != nil {
-		t.Errorf("--forget alone: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetTokenFlags(t)
+			flagDir, flagFormat, flagStyle = "", "", ""
+			flagSummary, flagReport, flagUnsafe = false, false, false
+			t.Cleanup(func() {
+				flagDir, flagFormat, flagStyle = "", "", ""
+				flagSummary, flagReport, flagUnsafe = false, false, false
+			})
+			tt.set()
+			err := validateRunFlags(tt.files)
+			switch {
+			case tt.want == "" && err != nil:
+				t.Errorf("unexpected error: %v", err)
+			case tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)):
+				t.Errorf("got %v, want an error with %q", err, tt.want)
+			}
+		})
 	}
 }

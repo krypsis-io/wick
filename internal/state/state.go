@@ -4,21 +4,28 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
-// Dir returns $XDG_STATE_HOME/wick, or ~/.local/state/wick when
-// XDG_STATE_HOME is not set or not an absolute path, as the XDG spec
-// requires. It returns "" when neither can be found.
+// Dir returns $XDG_STATE_HOME/wick when XDG_STATE_HOME is an absolute path.
+// Otherwise it returns %LOCALAPPDATA%\wick on Windows and
+// ~/.local/state/wick on other systems, as the XDG spec requires. It returns
+// "" when none of these can be found.
 func Dir() string {
-	dir := os.Getenv("XDG_STATE_HOME")
-	if !filepath.IsAbs(dir) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		dir = filepath.Join(home, ".local", "state")
+	if dir := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(dir) {
+		return filepath.Join(dir, "wick")
 	}
-	return filepath.Join(dir, "wick")
+	if runtime.GOOS == "windows" {
+		if dir := os.Getenv("LOCALAPPDATA"); filepath.IsAbs(dir) {
+			return filepath.Join(dir, "wick")
+		}
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".local", "state", "wick")
 }
 
 // MkdirPrivate creates dir with mode 0700. If dir exists, it sets its mode

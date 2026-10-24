@@ -18,6 +18,9 @@
 package wick
 
 import (
+	"regexp"
+	"sort"
+
 	"github.com/krypsis-io/wick/detect"
 	"github.com/krypsis-io/wick/format"
 	"github.com/krypsis-io/wick/redact"
@@ -173,6 +176,34 @@ func Rehydrate(input string, tm TokenMap) (string, error) {
 		originals[token] = entry.Original
 	}
 	return format.Restore(input, originals), nil
+}
+
+// tokenPattern matches text of the form of a token, such as [EMAIL-1].
+var tokenPattern = regexp.MustCompile(`\[([A-Z0-9][A-Z0-9_.-]*)-[0-9]+\]`)
+
+// UnknownTokens returns the tokens in input that are not in tm, sorted and
+// without duplicates. It reports only tokens whose tag, such as EMAIL in
+// [EMAIL-9], is used by a token in tm, so that other bracketed text is not
+// reported. Rehydrate leaves unknown tokens unchanged.
+func UnknownTokens(input string, tm TokenMap) []string {
+	tags := make(map[string]bool)
+	for token := range tm.entries {
+		if m := tokenPattern.FindStringSubmatch(token); m != nil {
+			tags[m[1]] = true
+		}
+	}
+	seen := make(map[string]bool)
+	var unknown []string
+	for _, m := range tokenPattern.FindAllStringSubmatch(input, -1) {
+		token := m[0]
+		if _, ok := tm.entries[token]; ok || !tags[m[1]] || seen[token] {
+			continue
+		}
+		seen[token] = true
+		unknown = append(unknown, token)
+	}
+	sort.Strings(unknown)
+	return unknown
 }
 
 func defaultConfig() *config {

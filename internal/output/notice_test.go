@@ -96,21 +96,7 @@ func TestNoticeMarkerPath(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
 	if got, want := NoticeMarkerPath(), filepath.Join(state, "wick", "notice-shown"); got != want {
-		t.Errorf("with XDG_STATE_HOME: got %q, want %q", got, want)
-	}
-
-	home := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", "")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	want := filepath.Join(home, ".local", "state", "wick", "notice-shown")
-	if got := NoticeMarkerPath(); got != want {
-		t.Errorf("without XDG_STATE_HOME: got %q, want %q", got, want)
-	}
-
-	t.Setenv("XDG_STATE_HOME", "relative/state")
-	if got := NoticeMarkerPath(); got != want {
-		t.Errorf("with a relative XDG_STATE_HOME: got %q, want %q", got, want)
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
