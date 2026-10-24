@@ -178,16 +178,27 @@ func runTokenize(cfg *config.Config, files []string) error {
 	if err != nil {
 		return err
 	}
-	keyStr, keychainErr := lookupKey()
-	if keyStr == "" {
-		exists, err := fileExists(path)
-		if err != nil {
-			return err
+	unlock, err := lockTokenMap(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	mapExists, err := fileExists(path)
+	if err != nil {
+		return err
+	}
+	if !mapExists && flagTokenFile == "" {
+		if legacy, _ := fileExists(legacyTokenFile); legacy {
+			return fmt.Errorf("%s is in the current directory: to add to it, pass --token-file %s and --key; to start a new token map at %s, delete it", legacyTokenFile, legacyTokenFile, path)
 		}
-		if exists {
+	}
+	keyStr, keychainErr := lookupKey(path)
+	if keyStr == "" {
+		if mapExists {
 			return fmt.Errorf("%s exists, but no key was found: pass --key or set %s, or run wick --forget to delete it", path, keyEnv)
 		}
-		if keyStr, err = newKey(keychainErr); err != nil {
+		if keyStr, err = newKey(path, keychainErr); err != nil {
 			return err
 		}
 	}
@@ -227,9 +238,6 @@ func runTokenize(cfg *config.Config, files []string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
 	if err := wick.SaveTokenMap(tm, key, path); err != nil {
 		return err
 	}
@@ -273,7 +281,7 @@ func runRehydrate(files []string) error {
 		}
 		return fmt.Errorf("no token map at %s: run wick --tokenize first", path)
 	}
-	keyStr, keychainErr := lookupKey()
+	keyStr, keychainErr := lookupKey(path)
 	if keyStr == "" {
 		if keychainErr != nil {
 			return fmt.Errorf("no key: cannot use the system keychain (%v): pass --key or set %s", keychainErr, keyEnv)

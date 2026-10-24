@@ -20,3 +20,12 @@ func Dir() string {
 	}
 	return filepath.Join(dir, "wick")
 }
+
+// MkdirPrivate creates dir with mode 0700. If dir exists, it sets its mode
+// to 0700, because os.MkdirAll does not change an existing directory.
+func MkdirPrivate(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return os.Chmod(dir, 0o700)
+}

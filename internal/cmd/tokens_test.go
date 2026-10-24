@@ -9,9 +9,11 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zalando/go-keyring"
 
+	"github.com/krypsis-io/wick"
 	"github.com/krypsis-io/wick/internal/config"
 )
 
@@ -56,6 +58,25 @@ func runCaptured(t *testing.T, input string, fn func() error) (stdout, stderr st
 	o, _ := os.ReadFile(outF.Name())
 	e, _ := os.ReadFile(errF.Name())
 	return string(o), string(e), err
+}
+
+// storedKey returns the key that the mock keychain holds for the token map at path.
+func storedKey(t *testing.T, path string) (string, error) {
+	t.Helper()
+	account, err := keychainAccount(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return keyring.Get(keyringService, account)
+}
+
+func mustKey(t *testing.T) string {
+	t.Helper()
+	k, err := wick.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
 }
 
 func tokenize(t *testing.T, input string) (string, string, error) {
@@ -194,11 +215,61 @@ func TestTokenMapStatusUnknown(t *testing.T) {
 	if _, _, err := tokenize(t, "contact a@acme.com\n"); !errors.Is(err, os.ErrPermission) {
 		t.Errorf("tokenize: got %v, want a permission error", err)
 	}
-	if _, err := keyring.Get(keyringService, keyringUser); !errors.Is(err, keyring.ErrNotFound) {
+	if _, err := storedKey(t, flagTokenFile); !errors.Is(err, keyring.ErrNotFound) {
 		t.Errorf("tokenize stored a key for a token map it cannot read: %v", err)
 	}
 	if _, _, err := rehydrate(t, "x\n"); !errors.Is(err, os.ErrPermission) {
 		t.Errorf("rehydrate: got %v, want a permission error", err)
+	}
+}
+
+func TestTokenize_LegacyTokenMap(t *testing.T) {
+	path := resetTokenFlags(t)
+	if err := os.WriteFile(legacyTokenFile, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := tokenize(t, "contact a@acme.com\n"); err == nil || !strings.Contains(err.Error(), "--token-file "+legacyTokenFile) {
+		t.Errorf("expected a hint about %s, got %v", legacyTokenFile, err)
+	}
+	if exists, _ := fileExists(path); exists {
+		t.Error("tokenize made a new token map next to the legacy one")
+	}
+
+	t.Setenv(keyEnv, mustKey(t))
+	if _, _, err := tokenize(t, "contact a@acme.com\n"); err == nil || !strings.Contains(err.Error(), "--token-file "+legacyTokenFile) {
+		t.Errorf("with %s: expected a hint about %s, got %v", keyEnv, legacyTokenFile, err)
+	}
+	if _, err := storedKey(t, path); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("tokenize stored a key: %v", err)
+	}
+}
+
+func TestForget_WaitsForLock(t *testing.T) {
+	path := resetTokenFlags(t)
+	tokenize(t, "contact a@acme.com\n")
+	unlock, err := lockTokenMap(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error)
+	go func() { done <- runForget() }()
+	select {
+	case <-done:
+		t.Fatal("--forget ran while a tokenize run held the lock")
+	case <-time.After(200 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("--forget did not run after unlock")
+	}
+	if exists, _ := fileExists(path + ".lock"); !exists {
+		t.Error("--forget deleted the lock file")
 	}
 }
 
@@ -216,7 +287,7 @@ func TestForget(t *testing.T) {
 	if exists, _ := fileExists(path); exists {
 		t.Error("token map still exists")
 	}
-	if _, err := keyring.Get(keyringService, keyringUser); !errors.Is(err, keyring.ErrNotFound) {
+	if _, err := storedKey(t, path); !errors.Is(err, keyring.ErrNotFound) {
 		t.Errorf("key still in the keychain: %v", err)
 	}
 
@@ -225,8 +296,8 @@ func TestForget(t *testing.T) {
 	}
 }
 
-func TestForget_CustomTokenFileKeepsKey(t *testing.T) {
-	resetTokenFlags(t)
+func TestForget_KeepsKeyOfOtherTokenMap(t *testing.T) {
+	defaultPath := resetTokenFlags(t)
 	tokenize(t, "contact a@acme.com\n")
 
 	flagTokenFile = filepath.Join(t.TempDir(), "other.enc")
@@ -237,8 +308,63 @@ func TestForget_CustomTokenFileKeepsKey(t *testing.T) {
 	if exists, _ := fileExists(flagTokenFile); exists {
 		t.Error("custom token map still exists")
 	}
-	if _, err := keyring.Get(keyringService, keyringUser); err != nil {
-		t.Errorf("key was deleted: %v", err)
+	if _, err := storedKey(t, flagTokenFile); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("key of the custom token map still in the keychain: %v", err)
+	}
+
+	flagTokenFile = ""
+	if _, err := storedKey(t, defaultPath); err != nil {
+		t.Errorf("key of the default token map was deleted: %v", err)
+	}
+	if out, _, err := rehydrate(t, "[EMAIL-1]\n"); err != nil || out != "a@acme.com\n" {
+		t.Errorf("rehydrate the default token map: got %q, %v", out, err)
+	}
+}
+
+func TestTokenize_TightensStateDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use Unix file modes")
+	}
+	path := resetTokenFlags(t)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tokenize(t, "contact a@acme.com\n")
+	info, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o700 {
+		t.Errorf("state directory mode: got %o, want 700", mode)
+	}
+}
+
+func TestLockTokenMap(t *testing.T) {
+	path := resetTokenFlags(t)
+	unlock, err := lockTokenMap(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	locked := make(chan struct{})
+	go func() {
+		unlock2, err := lockTokenMap(path)
+		if err == nil {
+			unlock2()
+		}
+		close(locked)
+	}()
+
+	select {
+	case <-locked:
+		t.Fatal("a second lock was taken while the first lock was held")
+	case <-time.After(200 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case <-locked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the second lock was not taken after unlock")
 	}
 }
 
