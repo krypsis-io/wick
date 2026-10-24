@@ -180,6 +180,9 @@ func TestLoadTokenMap_MissingFile(t *testing.T) {
 }
 
 func TestSaveTokenMap_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use Unix file modes")
+	}
 	input := "admin@acme.com"
 	key, _ := GenerateKey()
 	keyBytes, _ := DecodeKey(key)
