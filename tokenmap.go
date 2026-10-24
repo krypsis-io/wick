@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 // TokenEntry records a single redacted value and its replacement.
@@ -48,7 +49,8 @@ func DecodeKey(encoded string) ([]byte, error) {
 	return key, nil
 }
 
-// SaveTokenMap encrypts the token map with AES-256-GCM and writes it to path.
+// SaveTokenMap encrypts the token map with AES-256-GCM and writes it to path
+// with mode 0600. It replaces an existing file only after the write succeeds.
 func SaveTokenMap(tm TokenMap, key []byte, path string) error {
 	if len(key) != 32 {
 		return fmt.Errorf("key must be 256 bits (32 bytes), got %d", len(key))
@@ -73,7 +75,22 @@ func SaveTokenMap(tm TokenMap, key []byte, path string) error {
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, data, nil)
-	if err := os.WriteFile(path, ciphertext, 0o600); err != nil {
+
+	// Write to a temporary file and rename it, so that a failed write does not
+	// destroy an existing token map.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".wick-tokens-*")
+	if err != nil {
+		return fmt.Errorf("writing token file: %w", err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.Write(ciphertext); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("writing token file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("writing token file: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
 		return fmt.Errorf("writing token file: %w", err)
 	}
 	return nil

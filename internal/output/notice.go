@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/krypsis-io/wick/internal/state"
 )
 
 // BestEffortNotice reminds the user that detection is pattern-based and will
@@ -55,18 +57,13 @@ func (n Notifier) Notify(redacted bool) {
 	}
 }
 
-// NoticeMarkerPath returns $XDG_STATE_HOME/wick/notice-shown, or
-// ~/.local/state/wick/notice-shown when XDG_STATE_HOME is not set or not an
-// absolute path, as the XDG spec requires. It returns "" when neither can be
-// found.
+// NoticeMarkerPath returns the path of the file that records that the notice
+// was shown, in the directory from state.Dir. It returns "" when there is no
+// state directory.
 func NoticeMarkerPath() string {
-	dir := os.Getenv("XDG_STATE_HOME")
-	if !filepath.IsAbs(dir) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		dir = filepath.Join(home, ".local", "state")
+	dir := state.Dir()
+	if dir == "" {
+		return ""
 	}
-	return filepath.Join(dir, "wick", "notice-shown")
+	return filepath.Join(dir, "notice-shown")
 }

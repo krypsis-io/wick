@@ -93,3 +93,35 @@ func TestTokenizeReplacer_TokenCountersPerRuleID(t *testing.T) {
 		t.Errorf("expected [IPV4-1], got %q", ip)
 	}
 }
+
+func TestNewTokenizeReplacerFrom(t *testing.T) {
+	email := detect.Finding{Category: "pii", RuleID: "email"}
+	first := NewTokenizeReplacer()
+	a := first.Replace("a@acme.com", email)
+	b := first.Replace("b@acme.com", email)
+
+	tr := NewTokenizeReplacerFrom(first.Entries())
+	if got := tr.Replace("b@acme.com", email); got != b {
+		t.Errorf("known value: got %q, want %q", got, b)
+	}
+	if got := tr.Replace("c@acme.com", email); got != "[EMAIL-3]" {
+		t.Errorf("new value: got %q, want [EMAIL-3]", got)
+	}
+	entries := tr.Entries()
+	if len(entries) != 3 || entries[a] == nil || entries[a].Original != "a@acme.com" {
+		t.Errorf("entries do not keep the earlier values: %v", entries)
+	}
+}
+
+func TestNewTokenizeReplacerFrom_TokenInUse(t *testing.T) {
+	// A token that does not follow the [TAG-N] form must not be assigned
+	// again to a different value.
+	tr := NewTokenizeReplacerFrom(map[string]*TokenEntry{
+		"[EMAIL-1]": {Original: "a@acme.com", Replacement: "[EMAIL-1]", RuleID: "Email"},
+		"[EMAIL-2]": {Original: "b@acme.com", Replacement: "[EMAIL-2]", RuleID: "custom"},
+	})
+	got := tr.Replace("c@acme.com", detect.Finding{Category: "pii", RuleID: "email"})
+	if got == "[EMAIL-1]" || got == "[EMAIL-2]" {
+		t.Errorf("new value got a token that is in use: %q", got)
+	}
+}

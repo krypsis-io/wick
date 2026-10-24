@@ -115,7 +115,8 @@ func buildReport(findings []detect.Finding) Report {
 // The returned TokenMap holds the plaintext originals in memory; use
 // SaveTokenMap to persist it encrypted with an AES-256 key (see GenerateKey).
 // Each unique value gets a stable token of the form [RULEID-N], so the same
-// value always maps to the same token within a single Dehydrate call.
+// value always maps to the same token within a single Dehydrate call. Use
+// WithTokenMap to keep the tokens of an earlier call.
 func Dehydrate(input string, opts ...Option) (string, TokenMap, error) {
 	cfg := defaultConfig()
 	for _, o := range opts {
@@ -131,6 +132,19 @@ func Dehydrate(input string, opts ...Option) (string, TokenMap, error) {
 	// replacement overrides: every replaced value must produce a reversible
 	// TokenEntry, and a static override string would redact irreversibly.
 	tr := redact.NewTokenizeReplacer()
+	if cfg.tokenMap != nil {
+		existing := make(map[string]*redact.TokenEntry, len(cfg.tokenMap.entries))
+		for token, e := range cfg.tokenMap.entries {
+			existing[token] = &redact.TokenEntry{
+				Original:    e.Original,
+				Replacement: e.Replacement,
+				Category:    e.Category,
+				RuleID:      e.RuleID,
+				Count:       e.Count,
+			}
+		}
+		tr = redact.NewTokenizeReplacerFrom(existing)
+	}
 	redacted, _ := format.Process(input, detector, tr)
 
 	entries := tr.Entries()
