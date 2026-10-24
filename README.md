@@ -2,24 +2,14 @@
 
 [![CI](https://github.com/krypsis-io/wick/actions/workflows/pr.yml/badge.svg)](https://github.com/krypsis-io/wick/actions/workflows/pr.yml)
 [![Release](https://img.shields.io/github/v/release/krypsis-io/wick?sort=semver)](https://github.com/krypsis-io/wick/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/krypsis-io/wick)](go.mod)
 [![Go Reference](https://pkg.go.dev/badge/github.com/krypsis-io/wick.svg)](https://pkg.go.dev/github.com/krypsis-io/wick)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/krypsis-io/wick/badge)](https://securityscorecards.dev/viewer/?uri=github.com/krypsis-io/wick)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 wick removes secrets and personal data from logs, config files, and command output.
-Each value it finds becomes a placeholder, and the rest of the text stays the same.
-Use it before you paste output into an AI assistant, a GitHub issue, or a support ticket.
-
-```console
-$ kubectl logs deploy/checkout
-level=info msg="order placed" order=8812 user=jordan.lee@shopco.io ip=203.0.113.42
-level=debug msg="calling inventory" authorization="Bearer 7f3a9c2e1b8d4f6a0e5c9b2d7a1f4e8c"
-level=debug msg="GET /v1/rates?currency=usd&api_key=Qm2LvX7pT4wRn8dJ3bY5cH6f"
-
-$ kubectl logs deploy/checkout | wick
-level=info msg="order placed" order=8812 user=[REDACTED] ip=[REDACTED]
-level=debug msg="calling inventory" authorization="Bearer [REDACTED]"
-level=debug msg="GET /v1/rates?currency=usd&api_key=[REDACTED]"
-```
+It replaces each value it finds with `[REDACTED]` and keeps the rest of the text, so you can paste the output into an AI assistant, a GitHub issue, or a support ticket.
+Tokenize mode is reversible: wick replaces each value with a token such as `[EMAIL-1]`, and rehydrate mode puts the original values back into the reply.
 
 ![wick redacting kubectl logs and a Kubernetes Secret](assets/demo.gif)
 
@@ -44,7 +34,7 @@ wick writes the redacted text to stdout and everything else to stderr, so a pipe
 
 `--style` changes the placeholder: `redacted` (the default, `[REDACTED]`), `stars` (`***`), `hash` (`[EMAIL:63fe8938]`, the same for the same value), or `custom=<text>`.
 
-### Restore the original values
+### Tokenize and rehydrate
 
 ```bash
 wick --tokenize < app.log > safe.log        # prints a key to stderr
