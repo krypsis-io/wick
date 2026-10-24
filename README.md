@@ -21,6 +21,8 @@ brew install krypsis-io/tap/wick
 
 Or use `go install github.com/krypsis-io/wick/cmd/wick@latest`, the [install script](install.sh), or a binary from the [Releases](https://github.com/krypsis-io/wick/releases) page (Linux, macOS, and Windows).
 
+To use wick as a Go library, run `go get github.com/krypsis-io/wick`. See the [package documentation](https://pkg.go.dev/github.com/krypsis-io/wick).
+
 ## Usage
 
 ```bash
@@ -73,15 +75,6 @@ disable_rules:            # turn off built-in rules by ID
 ```
 
 wick also reads `~/.config/wick/config.yaml`. Settings in `.wick.yaml` override it, and list entries from both files are combined. See [`.wick.yaml.example`](.wick.yaml.example) for every option.
-
-## Go library
-
-```go
-out, report, err := wick.Redact("user=jordan.lee@shopco.io", wick.WithReplacer(redact.Stars))
-// out == "user=***", report.Total == 1
-```
-
-See the [package documentation](https://pkg.go.dev/github.com/krypsis-io/wick).
 
 ## License
 
