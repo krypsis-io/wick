@@ -173,6 +173,35 @@ func TestRehydrate_NoTokenMap(t *testing.T) {
 	}
 }
 
+func TestTokenMapStatusUnknown(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory that the user cannot read")
+	}
+	resetTokenFlags(t)
+	locked := filepath.Join(t.TempDir(), "locked")
+	if err := os.Mkdir(locked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	flagTokenFile = filepath.Join(locked, "tokens.enc")
+	if err := os.WriteFile(flagTokenFile, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+
+	if _, _, err := tokenize(t, "contact a@acme.com\n"); !errors.Is(err, os.ErrPermission) {
+		t.Errorf("tokenize: got %v, want a permission error", err)
+	}
+	if _, err := keyring.Get(keyringService, keyringUser); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("tokenize stored a key for a token map it cannot read: %v", err)
+	}
+	if _, _, err := rehydrate(t, "x\n"); !errors.Is(err, os.ErrPermission) {
+		t.Errorf("rehydrate: got %v, want a permission error", err)
+	}
+}
+
 func TestForget(t *testing.T) {
 	path := resetTokenFlags(t)
 	tokenize(t, "contact a@acme.com\n")
@@ -184,7 +213,7 @@ func TestForget(t *testing.T) {
 	if !strings.Contains(stderr, "deleted "+path) || !strings.Contains(stderr, "deleted the key") {
 		t.Errorf("stderr: %q", stderr)
 	}
-	if fileExists(path) {
+	if exists, _ := fileExists(path); exists {
 		t.Error("token map still exists")
 	}
 	if _, err := keyring.Get(keyringService, keyringUser); !errors.Is(err, keyring.ErrNotFound) {
@@ -205,7 +234,7 @@ func TestForget_CustomTokenFileKeepsKey(t *testing.T) {
 	if _, _, err := runCaptured(t, "", runForget); err != nil {
 		t.Fatal(err)
 	}
-	if fileExists(flagTokenFile) {
+	if exists, _ := fileExists(flagTokenFile); exists {
 		t.Error("custom token map still exists")
 	}
 	if _, err := keyring.Get(keyringService, keyringUser); err != nil {

@@ -70,16 +70,26 @@ func newKey(keychainErr error) (string, error) {
 	return k, nil
 }
 
-func fileExists(path string) bool {
+// fileExists reports whether path exists. It returns an error when the
+// status of path is unknown, for example when a parent directory cannot be read.
+func fileExists(path string) (bool, error) {
 	_, err := os.Stat(path)
-	return err == nil
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, os.ErrNotExist):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 // loadTokenMap loads the token map at path. It returns an empty map and
 // exists == false when there is no file at path.
 func loadTokenMap(key []byte, path string) (tm wick.TokenMap, exists bool, err error) {
-	if !fileExists(path) {
-		return wick.TokenMap{}, false, nil
+	exists, err = fileExists(path)
+	if err != nil || !exists {
+		return wick.TokenMap{}, false, err
 	}
 	tm, err = wick.LoadTokenMap(key, path)
 	return tm, true, err

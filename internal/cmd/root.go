@@ -180,7 +180,11 @@ func runTokenize(cfg *config.Config, files []string) error {
 	}
 	keyStr, keychainErr := lookupKey()
 	if keyStr == "" {
-		if fileExists(path) {
+		exists, err := fileExists(path)
+		if err != nil {
+			return err
+		}
+		if exists {
 			return fmt.Errorf("%s exists, but no key was found: pass --key or set %s, or run wick --forget to delete it", path, keyEnv)
 		}
 		if keyStr, err = newKey(keychainErr); err != nil {
@@ -259,8 +263,12 @@ func runRehydrate(files []string) error {
 	if err != nil {
 		return err
 	}
-	if !fileExists(path) {
-		if flagTokenFile == "" && fileExists(legacyTokenFile) {
+	exists, err := fileExists(path)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if legacy, _ := fileExists(legacyTokenFile); flagTokenFile == "" && legacy {
 			return fmt.Errorf("no token map at %s: to use the token map in the current directory, pass --token-file %s", path, legacyTokenFile)
 		}
 		return fmt.Errorf("no token map at %s: run wick --tokenize first", path)

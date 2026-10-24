@@ -51,7 +51,7 @@ func (n Notifier) Notify(redacted bool) {
 		return
 	}
 	if n.Marker != "" {
-		if err := os.MkdirAll(filepath.Dir(n.Marker), 0o755); err == nil {
+		if err := os.MkdirAll(filepath.Dir(n.Marker), 0o700); err == nil {
 			_ = os.WriteFile(n.Marker, nil, 0o644)
 		}
 	}

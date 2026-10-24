@@ -3,6 +3,7 @@ package output
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -22,6 +23,15 @@ func TestNotifier_ShownOnce(t *testing.T) {
 	}
 	if _, err := os.Stat(n.Marker); err != nil {
 		t.Fatalf("marker not written: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(filepath.Dir(n.Marker))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode := info.Mode().Perm(); mode != 0o700 {
+			t.Errorf("state directory mode: got %o, want 700", mode)
+		}
 	}
 
 	buf.Reset()
