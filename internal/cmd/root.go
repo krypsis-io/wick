@@ -189,7 +189,11 @@ func runTokenize(cfg *config.Config, files []string) error {
 		return err
 	}
 	if !mapExists && flagTokenFile == "" {
-		if legacy, _ := fileExists(legacyTokenFile); legacy {
+		legacy, err := fileExists(legacyTokenFile)
+		if err != nil {
+			return err
+		}
+		if legacy {
 			return fmt.Errorf("%s is in the current directory: to add to it, pass --token-file %s and --key; to start a new token map at %s, delete it", legacyTokenFile, legacyTokenFile, path)
 		}
 	}

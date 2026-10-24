@@ -244,6 +244,28 @@ func TestTokenize_LegacyTokenMap(t *testing.T) {
 	}
 }
 
+func TestTokenize_LegacyStatusUnknown(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory that the user cannot read")
+	}
+	path := resetTokenFlags(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(cwd, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(cwd, 0o700) })
+
+	if _, _, err := tokenize(t, "contact a@acme.com\n"); !errors.Is(err, os.ErrPermission) {
+		t.Errorf("tokenize: got %v, want a permission error", err)
+	}
+	if exists, _ := fileExists(path); exists {
+		t.Error("tokenize made a new token map")
+	}
+}
+
 func TestForget_WaitsForLock(t *testing.T) {
 	path := resetTokenFlags(t)
 	tokenize(t, "contact a@acme.com\n")
