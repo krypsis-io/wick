@@ -249,6 +249,23 @@ func TestTokenizeAndRehydrate_Files(t *testing.T) {
 	}
 }
 
+func TestReadInput_Limit(t *testing.T) {
+	dir := t.TempDir()
+	a, b := filepath.Join(dir, "a.log"), filepath.Join(dir, "b.log")
+	if err := os.WriteFile(a, bytes.Repeat([]byte("a"), maxStdinBytes-1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, []byte("b"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if in, err := readInput([]string{a, b}); err != nil || len(in) != maxStdinBytes {
+		t.Errorf("input at the limit: got %d bytes, %v", len(in), err)
+	}
+	if _, err := readInput([]string{a, b, b}); err == nil || !strings.Contains(err.Error(), "maximum size") {
+		t.Errorf("input over the limit: got %v", err)
+	}
+}
+
 func TestRehydrate_UnknownTokens(t *testing.T) {
 	resetTokenFlags(t)
 	tokenize(t, "contact a@acme.com\n")
@@ -393,7 +410,10 @@ func TestTokenize_TightensStateDirectory(t *testing.T) {
 		t.Skip("Windows does not use Unix file modes")
 	}
 	path := resetTokenFlags(t)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	tokenize(t, "contact a@acme.com\n")
@@ -413,13 +433,13 @@ func TestLockTokenMap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	locked := make(chan struct{})
+	locked := make(chan error)
 	go func() {
 		unlock2, err := lockTokenMap(path)
 		if err == nil {
 			unlock2()
 		}
-		close(locked)
+		locked <- err
 	}()
 
 	select {
@@ -429,7 +449,10 @@ func TestLockTokenMap(t *testing.T) {
 	}
 	unlock()
 	select {
-	case <-locked:
+	case err := <-locked:
+		if err != nil {
+			t.Fatalf("second lock: %v", err)
+		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the second lock was not taken after unlock")
 	}

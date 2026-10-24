@@ -334,14 +334,18 @@ func readInput(files []string) (string, error) {
 		if !info.Mode().IsRegular() {
 			return "", fmt.Errorf("%s is not a regular file", f)
 		}
-		if int64(b.Len())+info.Size() > maxStdinBytes {
-			return "", fmt.Errorf("input exceeds maximum size of %d bytes", maxStdinBytes)
-		}
-		data, err := os.ReadFile(f)
+		file, err := os.Open(f)
 		if err != nil {
 			return "", fmt.Errorf("reading %s: %w", f, err)
 		}
-		b.Write(data)
+		_, err = io.Copy(&b, io.LimitReader(file, int64(maxStdinBytes-b.Len())+1))
+		_ = file.Close()
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %w", f, err)
+		}
+		if b.Len() > maxStdinBytes {
+			return "", fmt.Errorf("input exceeds maximum size of %d bytes", maxStdinBytes)
+		}
 	}
 	return b.String(), nil
 }

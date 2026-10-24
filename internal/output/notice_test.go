@@ -46,7 +46,10 @@ func TestNotifier_TightensExistingDirectory(t *testing.T) {
 		t.Skip("Windows does not use Unix file modes")
 	}
 	dir := filepath.Join(t.TempDir(), "wick")
-	if err := os.Mkdir(dir, 0o755); err != nil {
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	var buf strings.Builder
