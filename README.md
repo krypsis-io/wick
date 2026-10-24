@@ -82,14 +82,17 @@ JSON output contains `redacted` (the sanitized content), `findings` (category, r
 Tokenize mode replaces each finding with a unique token and writes an encrypted map of the originals. Share the redacted text, then rehydrate the response to restore the real values.
 
 ```bash
-# Redact with reversible tokens; the AES-256 key is printed once to stderr
+# Redact with reversible tokens
 wick --tokenize < app.log > safe.log
 
-# Restore the original values
-wick --rehydrate --key <KEY> < safe.log
+# Restore the original values in a reply
+wick --rehydrate < reply.txt
+
+# Delete the token map and its key
+wick --forget
 ```
 
-The token map is written to `.wick-tokens.enc` by default (`--token-file` to change it). Both modes read from stdin only.
+The token map is encrypted with AES-256-GCM and written to `~/.local/state/wick/tokens.enc` (`$XDG_STATE_HOME/wick/tokens.enc` if set; `--token-file` to change it). Each run adds to the map, so a value keeps its token across runs. The key is stored in the system keychain (macOS Keychain, Secret Service on Linux, Windows Credential Manager). If no keychain is available, wick prints the key once; set `WICK_KEY` to it, or pass `--key`. Both modes read from stdin only.
 
 ## Configuration
 

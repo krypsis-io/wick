@@ -21,9 +21,8 @@ func TestRunTokenize_ExitStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			resetTokenFlags(t)
 			flagTokenFile = filepath.Join(t.TempDir(), "tokens.enc")
-			flagKey = ""
-			t.Cleanup(func() { flagTokenFile = ".wick-tokens.enc" })
 
 			setStdin(t, tt.input)
 			silenceStdio(t)
