@@ -1,0 +1,57 @@
+# Kubernetes objects for demo.tape. All values are fake. The API key and the
+# token are built from two parts so that secret scanners do not flag this file.
+#
+# Use a test cluster. The delete command removes the wick-demo namespace and
+# everything in it.
+#
+#   kubectl apply --server-side -f assets/demo.yaml
+#   kubectl -n wick-demo rollout status deploy/checkout
+#   vhs assets/demo.tape
+#   kubectl delete -f assets/demo.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wick-demo
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: checkout-db
+  namespace: wick-demo
+stringData:
+  DATABASE_URL: postgres://checkout:Xk9vQ2mLp7Rt@db.shop.svc:5432/orders
+  SESSION_SECRET: 4c9e1f7a2b8d5e3f0a6c
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: wick-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: checkout
+          image: busybox:1.36.1
+          securityContext:
+            allowPrivilegeEscalation: false
+          command:
+            - sh
+            - -c
+            - |
+              key="Qm2LvX7pT4wR""n8dJ3bY5cH6f"
+              token="7f3a9c2e1b8d4f6a""0e5c9b2d7a1f4e8c"
+              echo "level=info msg=\"order placed\" order=8812 user=jordan.lee@shopco.io ip=203.0.113.42"
+              echo "level=debug msg=\"calling inventory\" authorization=\"Bearer $token\""
+              echo "level=debug msg=\"GET /v1/rates?currency=usd&api_key=$key\""
+              sleep infinity
