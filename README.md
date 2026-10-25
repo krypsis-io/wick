@@ -39,11 +39,16 @@ wick writes the redacted text to stdout and everything else to stderr, so a pipe
 ### Tokenize and rehydrate
 
 ```bash
-wick --tokenize < app.log > safe.log        # prints a key to stderr
-wick --rehydrate --key <key> < reply.txt    # puts the original values back
+wick --tokenize app.log > safe.log          # replace each value with a token
+wick --rehydrate reply.txt                  # put the original values back
+wick --forget                               # delete the token map and its key
 ```
 
-`--tokenize` replaces each value with a numbered token, such as `[EMAIL-1]`, and writes the original values to `.wick-tokens.enc`, encrypted with the key. Send `safe.log` to an AI assistant, then run its answer through `--rehydrate` to see the real values.
+`--tokenize` replaces each value with a numbered token, such as `[EMAIL-1]`, and saves the original values in an encrypted token map. Send `safe.log` to an AI assistant, then run its reply through `--rehydrate` to see the real values. Both modes also read stdin.
+
+The token map is `~/.local/state/wick/tokens.enc`, or `$XDG_STATE_HOME/wick/tokens.enc` if that is set, or `%LOCALAPPDATA%\wick\tokens.enc` on Windows. Its key is in the system keychain: macOS Keychain, Secret Service on Linux, or Windows Credential Manager. If there is no keychain, wick prints the key once. Set `WICK_KEY` to it.
+
+All runs add to the same token map, so a value gets the same token in every log until you run `--forget`. Use `--token-file` to keep a separate token map for each task. `--rehydrate` leaves tokens that are not in the token map unchanged and lists them on stderr. Tokenize mode does not use `style` and `format` from `.wick.yaml`.
 
 ## What wick detects
 
