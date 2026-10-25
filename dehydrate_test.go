@@ -3,6 +3,8 @@ package wick
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -178,6 +180,9 @@ func TestLoadTokenMap_MissingFile(t *testing.T) {
 }
 
 func TestSaveTokenMap_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use Unix file modes")
+	}
 	input := "admin@acme.com"
 	key, _ := GenerateKey()
 	keyBytes, _ := DecodeKey(key)
@@ -214,5 +219,75 @@ func TestRehydrate_NoFindings(t *testing.T) {
 	}
 	if restored != input {
 		t.Errorf("round-trip with no findings failed: %q", restored)
+	}
+}
+
+func TestDehydrate_WithTokenMap(t *testing.T) {
+	_, first, err := Dehydrate("contact a@acme.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	redacted, merged, err := Dehydrate("cc b@acme.com and a@acme.com", WithTokenMap(first))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "cc [EMAIL-2] and [EMAIL-1]"; redacted != want {
+		t.Errorf("got %q, want %q", redacted, want)
+	}
+
+	restored, err := Rehydrate("[EMAIL-1] wrote to [EMAIL-2]", merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "a@acme.com wrote to b@acme.com"; restored != want {
+		t.Errorf("got %q, want %q", restored, want)
+	}
+}
+
+func TestSaveTokenMap_Mode(t *testing.T) {
+	key, _ := DecodeKey(mustGenerateKey(t))
+	_, tm, _ := Dehydrate("contact a@acme.com")
+	path := filepath.Join(t.TempDir(), "tokens.enc")
+	for range 2 {
+		if err := SaveTokenMap(tm, key, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); runtime.GOOS != "windows" && mode != 0o600 {
+		t.Errorf("mode = %o, want 600", mode)
+	}
+	files, _ := os.ReadDir(filepath.Dir(path))
+	if len(files) != 1 {
+		t.Errorf("temporary files left behind: %v", files)
+	}
+}
+
+func mustGenerateKey(t *testing.T) string {
+	t.Helper()
+	k, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
+}
+
+func TestUnknownTokens(t *testing.T) {
+	_, tm, err := Dehydrate("from a@acme.com via 10.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := "[EMAIL-1] [EMAIL-3] [EMAIL-2] [EMAIL-3] [IPV4-1] [IPV4-7] [ERROR-404] [CVE-2024-1234]"
+	got := UnknownTokens(input, tm)
+	want := []string{"[EMAIL-2]", "[EMAIL-3]", "[IPV4-7]"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got := UnknownTokens("[EMAIL-1]", TokenMap{}); got != nil {
+		t.Errorf("empty token map: got %v", got)
 	}
 }

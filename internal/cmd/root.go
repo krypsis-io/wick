@@ -32,6 +32,7 @@ var (
 	flagRehydrate bool
 	flagKey       string
 	flagTokenFile string
+	flagForget    bool
 )
 
 var rootCmd = &cobra.Command{
@@ -61,8 +62,9 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagUnsafe, "report-unsafe", false, "like --report, but print the raw matched values (exposes secrets on stderr)")
 	rootCmd.Flags().BoolVar(&flagTokenize, "tokenize", false, "redact with reversible tokens and write an encrypted token map")
 	rootCmd.Flags().BoolVar(&flagRehydrate, "rehydrate", false, "restore original values from a token map")
-	rootCmd.Flags().StringVar(&flagKey, "key", "", "base64-encoded AES-256 key for --tokenize / --rehydrate")
-	rootCmd.Flags().StringVar(&flagTokenFile, "token-file", ".wick-tokens.enc", "path to the encrypted token map file")
+	rootCmd.Flags().StringVar(&flagKey, "key", "", "base64-encoded AES-256 key for --tokenize / --rehydrate (default: $WICK_KEY, then the system keychain)")
+	rootCmd.Flags().StringVar(&flagTokenFile, "token-file", "", "path to the encrypted token map (default: ~/.local/state/wick/tokens.enc, or %LOCALAPPDATA%\\wick\\tokens.enc on Windows)")
+	rootCmd.Flags().BoolVar(&flagForget, "forget", false, "delete the token map and its key from the system keychain")
 }
 
 var errFindingsPresent = errors.New("findings present")
@@ -104,6 +106,10 @@ func run(_ *cobra.Command, args []string) error {
 
 	if err := validateRunFlags(files); err != nil {
 		return err
+	}
+
+	if flagForget {
+		return runForget()
 	}
 
 	// Rehydrate is a separate mode: read stdin, restore originals, done.
@@ -159,30 +165,51 @@ func run(_ *cobra.Command, args []string) error {
 }
 
 func runTokenize(cfg *config.Config, files []string) error {
-	if len(files) > 0 || flagDir != "" {
-		return fmt.Errorf("--tokenize only supports stdin input")
-	}
-
-	input, err := readStdin()
+	input, err := readInput(files)
 	if err != nil {
 		return err
 	}
 
-	// Resolve or generate the key.
-	keyStr := flagKey
-	if keyStr == "" {
-		var genErr error
-		keyStr, genErr = wick.GenerateKey()
-		if genErr != nil {
-			return genErr
+	path, err := tokenFilePath()
+	if err != nil {
+		return err
+	}
+	unlock, err := lockTokenMap(path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
+	mapExists, err := fileExists(path)
+	if err != nil {
+		return err
+	}
+	if !mapExists && flagTokenFile == "" {
+		legacy, err := fileExists(legacyTokenFile)
+		if err != nil {
+			return err
 		}
-		fmt.Fprintf(os.Stderr, "wick: key: %s\n", keyStr)
-		fmt.Fprintln(os.Stderr, "wick: WARNING: store this key securely — it is required to rehydrate and will not be shown again")
+		if legacy {
+			return fmt.Errorf("%s is in the current directory: to add to it, pass --token-file %s and --key; to start a new token map at %s, delete it", legacyTokenFile, legacyTokenFile, path)
+		}
+	}
+	keyStr, keychainErr := lookupKey(path)
+	if keyStr == "" {
+		if mapExists {
+			return fmt.Errorf("%s exists, but no key was found: pass --key or set %s, or run wick --forget to delete it", path, keyEnv)
+		}
+		if keyStr, err = newKey(path, keychainErr); err != nil {
+			return err
+		}
 	}
 
 	key, err := wick.DecodeKey(keyStr)
 	if err != nil {
 		return err
+	}
+	existing, exists, err := loadTokenMap(key, path)
+	if err != nil {
+		return fmt.Errorf("%w: to start a new token map, run wick --forget or pass --token-file", err)
 	}
 
 	var opts []wick.Option
@@ -202,15 +229,21 @@ func runTokenize(cfg *config.Config, files []string) error {
 		opts = append(opts, wick.WithBlocklist(blocklistToCustomPatterns(cfg.Blocklist)))
 	}
 
+	if exists {
+		opts = append(opts, wick.WithTokenMap(existing))
+	}
+
 	redacted, tm, err := wick.Dehydrate(input, opts...)
 	if err != nil {
 		return err
 	}
 
-	if err := wick.SaveTokenMap(tm, key, flagTokenFile); err != nil {
+	if err := wick.SaveTokenMap(tm, key, path); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "wick: token map written to %s\n", flagTokenFile)
+	if !mapExists {
+		fmt.Fprintf(os.Stderr, "wick: new token map at %s\n", path)
+	}
 	stderrNotifier().Notify(redacted != input)
 
 	fmt.Print(redacted)
@@ -233,24 +266,39 @@ func stderrNotifier() output.Notifier {
 }
 
 func runRehydrate(files []string) error {
-	if len(files) > 0 || flagDir != "" {
-		return fmt.Errorf("--rehydrate only supports stdin input")
+	path, err := tokenFilePath()
+	if err != nil {
+		return err
 	}
-	if flagKey == "" {
-		return fmt.Errorf("--rehydrate requires --key")
+	exists, err := fileExists(path)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if legacy, _ := fileExists(legacyTokenFile); flagTokenFile == "" && legacy {
+			return fmt.Errorf("no token map at %s: to use the token map in the current directory, pass --token-file %s", path, legacyTokenFile)
+		}
+		return fmt.Errorf("no token map at %s: run wick --tokenize first", path)
+	}
+	keyStr, keychainErr := lookupKey(path)
+	if keyStr == "" {
+		if keychainErr != nil {
+			return fmt.Errorf("no key: cannot use the system keychain (%v): pass --key or set %s", keychainErr, keyEnv)
+		}
+		return fmt.Errorf("no key: pass --key or set %s", keyEnv)
 	}
 
-	key, err := wick.DecodeKey(flagKey)
+	key, err := wick.DecodeKey(keyStr)
 	if err != nil {
 		return err
 	}
 
-	input, err := readStdin()
+	input, err := readInput(files)
 	if err != nil {
 		return err
 	}
 
-	tm, err := wick.LoadTokenMap(key, flagTokenFile)
+	tm, err := wick.LoadTokenMap(key, path)
 	if err != nil {
 		return err
 	}
@@ -260,8 +308,46 @@ func runRehydrate(files []string) error {
 		return err
 	}
 
+	if unknown := wick.UnknownTokens(input, tm); len(unknown) > 0 {
+		noun := "tokens are"
+		if len(unknown) == 1 {
+			noun = "token is"
+		}
+		fmt.Fprintf(os.Stderr, "wick: %d %s not in the token map: %s\n", len(unknown), noun, strings.Join(unknown, ", "))
+	}
 	fmt.Print(restored)
 	return nil
+}
+
+// readInput returns the contents of files, joined in order, or stdin when
+// files is empty.
+func readInput(files []string) (string, error) {
+	if len(files) == 0 {
+		return readStdin()
+	}
+	var b strings.Builder
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %w", f, err)
+		}
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("%s is not a regular file", f)
+		}
+		file, err := os.Open(f)
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %w", f, err)
+		}
+		_, err = io.Copy(&b, io.LimitReader(file, int64(maxStdinBytes-b.Len())+1))
+		_ = file.Close()
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %w", f, err)
+		}
+		if b.Len() > maxStdinBytes {
+			return "", fmt.Errorf("input exceeds maximum size of %d bytes", maxStdinBytes)
+		}
+	}
+	return b.String(), nil
 }
 
 func readStdin() (string, error) {
@@ -287,6 +373,36 @@ func validateRunFlags(files []string) error {
 	if flagTokenize && flagRehydrate {
 		return fmt.Errorf("--tokenize and --rehydrate are mutually exclusive")
 	}
+	if flagForget && (flagTokenize || flagRehydrate || len(files) > 0 || flagDir != "") {
+		return fmt.Errorf("--forget cannot be combined with input or other modes")
+	}
+	if mode := tokenMode(); mode != "" {
+		if flagDir != "" {
+			return fmt.Errorf("%s does not support --dir: pass files or pipe input", mode)
+		}
+		for _, f := range []struct {
+			name string
+			set  bool
+		}{
+			{"--format", flagFormat != ""},
+			{"--style", flagStyle != ""},
+			{"--summary", flagSummary},
+			{"--report", flagReport},
+			{"--report-unsafe", flagUnsafe},
+			{"--key", flagForget && flagKey != ""},
+		} {
+			if f.set {
+				return fmt.Errorf("%s cannot be combined with %s", f.name, mode)
+			}
+		}
+	} else {
+		if flagKey != "" {
+			return fmt.Errorf("--key is only valid with --tokenize or --rehydrate")
+		}
+		if flagTokenFile != "" {
+			return fmt.Errorf("--token-file is only valid with --tokenize, --rehydrate, or --forget")
+		}
+	}
 	if flagDir != "" && len(files) > 0 {
 		return fmt.Errorf("--dir cannot be combined with file arguments or --file")
 	}
@@ -294,6 +410,19 @@ func validateRunFlags(files []string) error {
 		return fmt.Errorf("--out is only valid with --dir")
 	}
 	return nil
+}
+
+// tokenMode returns the name of the token map flag that is set, or "".
+func tokenMode() string {
+	switch {
+	case flagTokenize:
+		return "--tokenize"
+	case flagRehydrate:
+		return "--rehydrate"
+	case flagForget:
+		return "--forget"
+	}
+	return ""
 }
 
 // blocklistToCustomPatterns converts config blocklist entries into always-detect

@@ -2,6 +2,7 @@ package redact
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -25,6 +26,7 @@ type TokenizeReplacer struct {
 	mu      sync.Mutex
 	byValue map[string]*TokenEntry // original value → entry
 	counter map[string]int         // category → next counter
+	used    map[string]bool        // tokens already assigned
 }
 
 // NewTokenizeReplacer creates a TokenizeReplacer ready for use.
@@ -32,7 +34,38 @@ func NewTokenizeReplacer() *TokenizeReplacer {
 	return &TokenizeReplacer{
 		byValue: make(map[string]*TokenEntry),
 		counter: make(map[string]int),
+		used:    make(map[string]bool),
 	}
+}
+
+// NewTokenizeReplacerFrom creates a TokenizeReplacer that already holds
+// entries, such as the entries of an earlier run. A value that is in entries
+// keeps its token, and new tokens continue the numbering of each rule.
+func NewTokenizeReplacerFrom(entries map[string]*TokenEntry) *TokenizeReplacer {
+	t := NewTokenizeReplacer()
+	for _, e := range entries {
+		cp := *e
+		t.byValue[cp.Original] = &cp
+		t.used[cp.Replacement] = true
+		tag := strings.ToUpper(cp.RuleID)
+		if n := tokenNumber(cp.Replacement, tag); n > t.counter[tag] {
+			t.counter[tag] = n
+		}
+	}
+	return t
+}
+
+// tokenNumber returns N for a token of the form [TAG-N], or 0.
+func tokenNumber(token, tag string) int {
+	digits, ok := strings.CutPrefix(token, "["+tag+"-")
+	if !ok {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSuffix(digits, "]"))
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // Replace satisfies the Replacer interface. It assigns a stable token to each
@@ -47,8 +80,12 @@ func (t *TokenizeReplacer) Replace(value string, finding detect.Finding) string 
 	}
 
 	tag := strings.ToUpper(finding.RuleID)
-	t.counter[tag]++
-	token := fmt.Sprintf("[%s-%d]", tag, t.counter[tag])
+	var token string
+	for token == "" || t.used[token] {
+		t.counter[tag]++
+		token = fmt.Sprintf("[%s-%d]", tag, t.counter[tag])
+	}
+	t.used[token] = true
 
 	entry := &TokenEntry{
 		Original:    value,

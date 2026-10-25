@@ -18,6 +18,9 @@
 package wick
 
 import (
+	"regexp"
+	"sort"
+
 	"github.com/krypsis-io/wick/detect"
 	"github.com/krypsis-io/wick/format"
 	"github.com/krypsis-io/wick/redact"
@@ -115,7 +118,8 @@ func buildReport(findings []detect.Finding) Report {
 // The returned TokenMap holds the plaintext originals in memory; use
 // SaveTokenMap to persist it encrypted with an AES-256 key (see GenerateKey).
 // Each unique value gets a stable token of the form [RULEID-N], so the same
-// value always maps to the same token within a single Dehydrate call.
+// value always maps to the same token within a single Dehydrate call. Use
+// WithTokenMap to keep the tokens of an earlier call.
 func Dehydrate(input string, opts ...Option) (string, TokenMap, error) {
 	cfg := defaultConfig()
 	for _, o := range opts {
@@ -131,6 +135,19 @@ func Dehydrate(input string, opts ...Option) (string, TokenMap, error) {
 	// replacement overrides: every replaced value must produce a reversible
 	// TokenEntry, and a static override string would redact irreversibly.
 	tr := redact.NewTokenizeReplacer()
+	if cfg.tokenMap != nil {
+		existing := make(map[string]*redact.TokenEntry, len(cfg.tokenMap.entries))
+		for token, e := range cfg.tokenMap.entries {
+			existing[token] = &redact.TokenEntry{
+				Original:    e.Original,
+				Replacement: e.Replacement,
+				Category:    e.Category,
+				RuleID:      e.RuleID,
+				Count:       e.Count,
+			}
+		}
+		tr = redact.NewTokenizeReplacerFrom(existing)
+	}
 	redacted, _ := format.Process(input, detector, tr)
 
 	entries := tr.Entries()
@@ -159,6 +176,34 @@ func Rehydrate(input string, tm TokenMap) (string, error) {
 		originals[token] = entry.Original
 	}
 	return format.Restore(input, originals), nil
+}
+
+// tokenPattern matches text of the form of a token, such as [EMAIL-1].
+var tokenPattern = regexp.MustCompile(`\[([A-Z0-9][A-Z0-9_.-]*)-[0-9]+\]`)
+
+// UnknownTokens returns the tokens in input that are not in tm, sorted and
+// without duplicates. It reports only tokens whose tag, such as EMAIL in
+// [EMAIL-9], is used by a token in tm, so that other bracketed text is not
+// reported. Rehydrate leaves unknown tokens unchanged.
+func UnknownTokens(input string, tm TokenMap) []string {
+	tags := make(map[string]bool)
+	for token := range tm.entries {
+		if m := tokenPattern.FindStringSubmatch(token); m != nil {
+			tags[m[1]] = true
+		}
+	}
+	seen := make(map[string]bool)
+	var unknown []string
+	for _, m := range tokenPattern.FindAllStringSubmatch(input, -1) {
+		token := m[0]
+		if _, ok := tm.entries[token]; ok || !tags[m[1]] || seen[token] {
+			continue
+		}
+		seen[token] = true
+		unknown = append(unknown, token)
+	}
+	sort.Strings(unknown)
+	return unknown
 }
 
 func defaultConfig() *config {

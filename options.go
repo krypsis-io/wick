@@ -13,6 +13,7 @@ type config struct {
 	blocklist      []detect.CustomPattern
 	rulesFile      string
 	disableRules   []string
+	tokenMap       *TokenMap
 }
 
 // Option configures a Redact call.
@@ -68,5 +69,15 @@ func WithRulesFile(path string) Option {
 func WithDisabledRules(ids []string) Option {
 	return optionFunc(func(c *config) {
 		c.disableRules = append(c.disableRules, ids...)
+	})
+}
+
+// WithTokenMap makes Dehydrate continue from an existing TokenMap, such as one
+// loaded with LoadTokenMap. Values that are already in tm keep their tokens,
+// and the TokenMap that Dehydrate returns holds the old and the new entries.
+// Redact ignores this option.
+func WithTokenMap(tm TokenMap) Option {
+	return optionFunc(func(c *config) {
+		c.tokenMap = &tm
 	})
 }
