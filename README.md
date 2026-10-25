@@ -25,30 +25,92 @@ To use wick as a Go library, run `go get github.com/krypsis-io/wick`. See the [p
 
 ## Usage
 
-```bash
-kubectl logs deploy/api | wick | pbcopy     # redact, then copy to the clipboard
-wick app.log .env > shared.txt              # redact files
-wick --dir ./configs --out ./configs-safe   # redact a directory tree
-wick --report app.log > /dev/null           # list each finding and its rule
-```
+wick reads text from files or from a pipe. It prints the same text with the secrets and personal data replaced.
 
-wick writes the redacted text to stdout and everything else to stderr, so a pipe gets only the redacted text. It exits with `0` when nothing was redacted, `1` when something was redacted, and `2` on an error.
-
-`--style` changes the placeholder: `redacted` (the default, `[REDACTED]`), `stars` (`***`), `hash` (`[EMAIL:63fe8938]`, the same for the same value), or `custom=<text>`.
-
-### Tokenize and rehydrate
+Redact a file:
 
 ```bash
-wick --tokenize app.log > safe.log          # replace each value with a token
-wick --rehydrate reply.txt                  # put the original values back
-wick --forget                               # delete the token map and its key
+wick app.log
 ```
 
-`--tokenize` replaces each value with a numbered token, such as `[EMAIL-1]`, and saves the original values in an encrypted token map. Send `safe.log` to an AI assistant, then run its reply through `--rehydrate` to see the real values. Both modes also read stdin.
+Redact the output of a command:
 
-The token map is `~/.local/state/wick/tokens.enc`, or `$XDG_STATE_HOME/wick/tokens.enc` if that is set, or `%LOCALAPPDATA%\wick\tokens.enc` on Windows. Its key is in the system keychain: macOS Keychain, Secret Service on Linux, or Windows Credential Manager. If there is no keychain, wick prints the key once. Set `WICK_KEY` to it.
+```bash
+kubectl logs deploy/api | wick
+```
 
-All runs add to the same token map, so a value gets the same token in every log until you run `--forget`. Use `--token-file` to keep a separate token map for each task. `--rehydrate` leaves tokens that are not in the token map unchanged and lists them on stderr. Tokenize mode does not use `style` and `format` from `.wick.yaml`.
+```text
+user=alice@example.com src=10.0.4.12   →   user=[REDACTED] src=[REDACTED]
+```
+
+wick prints only the redacted text. Messages go to stderr. So you can save the result to a file or copy it to the clipboard:
+
+```bash
+wick app.log > app-safe.log
+kubectl logs deploy/api | wick | pbcopy
+```
+
+### Options
+
+| Option | What it does |
+|---|---|
+| `--dir <dir> --out <dir>` | Redacts every file in a directory and writes the results to a new directory. |
+| `--summary` | Prints the number of redactions for each type on stderr. |
+| `--report` | Prints each finding, its location and its rule on stderr. |
+| `--style <style>` | Changes the placeholder: `redacted` (`[REDACTED]`, the default), `stars` (`***`), `hash` (`[EMAIL:63fe8938]`), or `custom=<text>`. |
+| `--format json` | Prints the redacted text and the findings as JSON. |
+
+Run `wick --help` to see all options.
+
+The exit code is `0` when wick redacts nothing, `1` when wick redacts a value, and `2` on an error.
+
+### Get the real values back
+
+Use tokenize mode when you ask an AI assistant about a log and you want its answer to show the real values.
+
+1. Replace each value with a numbered token:
+
+   ```bash
+   wick --tokenize app.log > safe.log
+   ```
+
+   ```text
+   user=alice@example.com src=10.0.4.12   →   user=[EMAIL-1] src=[IPV4-1]
+   ```
+
+2. Paste `safe.log` into the AI assistant, and save its answer as `reply.txt`.
+
+3. Put the real values back into the answer:
+
+   ```bash
+   wick --rehydrate reply.txt
+   ```
+
+4. When you are done, delete the saved values:
+
+   ```bash
+   wick --forget
+   ```
+
+`--tokenize` and `--rehydrate` also read from a pipe, for example `pbpaste | wick --rehydrate`.
+
+<details>
+<summary>Where wick saves the values</summary>
+
+wick saves the original values in an encrypted token map:
+
+- Linux and macOS: `~/.local/state/wick/tokens.enc`, or `$XDG_STATE_HOME/wick/tokens.enc` if `XDG_STATE_HOME` is set
+- Windows: `%LOCALAPPDATA%\wick\tokens.enc`
+
+The key is in the system keychain: macOS Keychain, Secret Service on Linux, or Windows Credential Manager. If there is no keychain, wick prints the key one time. Set `WICK_KEY` to that key.
+
+Each `--tokenize` run adds to the same token map, so a value gets the same token in every log until you run `--forget`. To keep a separate token map for each task, use `--token-file <path>`.
+
+If the answer contains a token that is not in the token map, `--rehydrate` does not change it and prints it on stderr.
+
+Tokenize mode does not use `style` and `format` from `.wick.yaml`.
+
+</details>
 
 ## What wick detects
 
