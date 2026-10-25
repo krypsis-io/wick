@@ -13,7 +13,7 @@
     { "type": "revert", "section": "Reverts" },
     { "type": "refactor", "section": "Code Refactoring" },
     { "type": "deps", "section": "Dependencies" },
-    { "type": "docs", "section": "Documentation", "hidden": true },
+    { "type": "docs", "section": "Documentation" },
     { "type": "style", "section": "Styles", "hidden": true },
     { "type": "chore", "section": "Miscellaneous Chores", "hidden": true },
     { "type": "test", "section": "Tests", "hidden": true },
