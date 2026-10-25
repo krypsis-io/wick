@@ -43,7 +43,7 @@ kubectl logs deploy/api | wick
 user=alice@example.com src=10.0.4.12   →   user=[REDACTED] src=[REDACTED]
 ```
 
-wick prints only the redacted text. Messages go to stderr. So you can save the result to a file or copy it to the clipboard:
+By default, wick prints only the redacted text. Messages go to stderr. So you can save the result to a file or copy it to the clipboard:
 
 ```bash
 wick app.log > app-safe.log
