@@ -47,7 +47,7 @@ brews:
     directory: Formula
     homepage: "https://github.com/krypsis-io/wick"
     description: "Fast, zero-config secret and PII redaction for any text stream"
-    license: "AGPL-3.0"
+    license: "Apache-2.0"
     test: |
       system "#{bin}/wick", "version"
     commit_msg_template: "chore: update wick to {{ .Tag }}"

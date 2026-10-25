@@ -5,7 +5,7 @@
 [![Go version](https://img.shields.io/github/go-mod/go-version/krypsis-io/wick)](go.mod)
 [![Go Reference](https://pkg.go.dev/badge/github.com/krypsis-io/wick.svg)](https://pkg.go.dev/github.com/krypsis-io/wick)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/krypsis-io/wick/badge)](https://securityscorecards.dev/viewer/?uri=github.com/krypsis-io/wick)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 wick removes secrets and personal data from logs, config files, and command output.
 It replaces each value it finds with `[REDACTED]` and keeps the rest of the text, so you can paste the output into an AI assistant, a GitHub issue, or a support ticket.
@@ -145,4 +145,4 @@ wick also reads `~/.config/wick/config.yaml`. Settings in `.wick.yaml` override 
 
 ## License
 
-[AGPL-3.0](LICENSE). The bundled Gitleaks rules are MIT-licensed; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
+[Apache-2.0](LICENSE). The bundled Gitleaks rules are MIT-licensed; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
