@@ -4,6 +4,13 @@
 
 * close secret detection gaps and mask --report values ([#39](https://github.com/krypsis-io/wick/issues/39)) ([19818de](https://github.com/krypsis-io/wick/commit/19818dede49dc7586cb1be9c43307cc3a1c85f53))
 
+## [0.5.1](https://github.com/krypsis-io/wick/compare/v0.5.0...v0.5.1) (2026-11-14)
+
+
+### Dependencies
+
+* Update module golang.org/x/sys to v0.50.0 ([#66](https://github.com/krypsis-io/wick/issues/66)) ([7f8cfbf](https://github.com/krypsis-io/wick/commit/7f8cfbfdf7829e5bfaa558a5e127a65ae7414139))
+
 ## [0.5.0](https://github.com/krypsis-io/wick/compare/v0.4.0...v0.5.0) (2026-10-25)
 
 
